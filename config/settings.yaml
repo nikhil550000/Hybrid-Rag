@@ -1,0 +1,36 @@
+llm:
+  provider: anthropic          # anthropic | google
+  model: claude-haiku-4-5      # swap without code change
+  temperature: 0.0             # low temp = factual, deterministic
+
+embeddings:
+  model: all-MiniLM-L6-v2     # local via sentence-transformers, no API key needed
+
+retrieval:
+  top_k: 20                    # candidates retrieved before reranking
+  top_k_reranked: 5            # chunks passed to LLM after reranking
+  rrf_k: 60                    # RRF constant — don't change unless you know why
+
+reranker:
+  provider: sentence_transformers  # sentence_transformers | cohere
+  model: cross-encoder/ms-marco-MiniLM-L-6-v2
+
+chunking:
+  chunk_size: 600              # tokens per chunk
+  chunk_overlap: 100           # overlap to preserve boundary context
+
+prompts:
+  version: v1                  # maps to prompts/v1/
+
+store:
+  vector_store_path: .chroma
+  bm25_index_path: data/bm25_index.pkl
+  collection_name: rag_scholar
+
+eval:
+  dataset_path: evals/dataset.json
+  faithfulness_threshold: 0.75  # gate rises after first baseline run
+
+observability:
+  backend: langfuse            # langfuse | langsmith | none
+  log_level: INFO

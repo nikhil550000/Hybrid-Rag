@@ -9,4 +9,21 @@ wheels/
 # Virtual environments
 .venv
 
+# Environment variables (secrets!)
+.env
+# Data and indices
 data/*
+.chroma/
+
+# Build outputs
+build/
+dist/
+wheels/
+*.egg-info/
+
+AGENT.md
+BUILDLOG.md
+
+SoftWare Requirement Documents/*
+
+.env

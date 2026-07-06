@@ -1,0 +1,9 @@
+Context passages:
+
+{formatted_chunks}
+
+---
+
+Question: {user_query}
+
+Answer (cite every claim with [SOURCE: chunk_id]):
