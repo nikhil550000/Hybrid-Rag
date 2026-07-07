@@ -54,18 +54,19 @@ def setup_logging(log_level: str = "INFO") -> Path:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    correlation_filter = CorrelationFilter()
+
     # Console handler
     console = logging.StreamHandler()
     console.setFormatter(formatter)
+    console.addFilter(correlation_filter)
     root_logger.addHandler(console)
 
     # File handler
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(correlation_filter)
     root_logger.addHandler(file_handler)
-
-    # Attach correlation filter to root logger
-    root_logger.addFilter(CorrelationFilter())
 
     return log_file
 
