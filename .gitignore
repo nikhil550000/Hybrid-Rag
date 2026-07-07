@@ -25,3 +25,7 @@ AGENT.md
 BUILDLOG.md
 
 SoftWare Requirement Documents/*
+
+.chroma/*
+
+logs/*
