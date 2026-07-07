@@ -1,0 +1,502 @@
+[
+    {
+        "question": "How many layers did the deep LSTM used in the main experiments have, and how many cells were at each layer?",
+        "ground_truth": "The deep LSTM had 4 layers, with 1000 cells at each layer.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What were the input and output vocabulary sizes used for the English-to-French translation experiments?",
+        "ground_truth": "An input vocabulary of 160,000 words for the source language and an output vocabulary of 80,000 words for the target language.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What BLEU score did the ensemble of 5 reversed LSTMs achieve on the WMT'14 English-to-French test set using a beam size of 12, from direct decoding (Table 1)?",
+        "ground_truth": "34.81 BLEU.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "By how many BLEU points did rescoring the baseline 1000-best list with an ensemble of 5 reversed LSTMs improve over the baseline SMT system's score?",
+        "ground_truth": "It improved the baseline (33.30 BLEU) by 3.2 BLEU points, reaching 36.5 BLEU.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "According to the paper, why did reversing the order of words in the source sentences (but not target sentences) improve LSTM performance?",
+        "ground_truth": "Reversing the source words introduces many short-term dependencies between the source and target sentences, reducing the problem's 'minimal time lag' and making it easier for backpropagation/SGD to establish communication between them, which makes the optimization problem simpler.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What were the test perplexity and BLEU score changes observed when source sentences were reversed, compared to the non-reversed version?",
+        "ground_truth": "Test perplexity dropped from 5.8 to 4.7, and test BLEU score increased from 25.9 to 30.6.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What learning rate schedule and total number of training epochs did the authors use for training the LSTM?",
+        "ground_truth": "They used a fixed learning rate of 0.7 for the first 5 epochs, then began halving the learning rate every half epoch, training for a total of 7.5 epochs.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What gradient norm threshold did the authors use to constrain exploding gradients, and how did they rescale the gradient when it was exceeded?",
+        "ground_truth": "They enforced a hard constraint where s = ||g||_2 (g being the gradient divided by batch size 128); if s > 5, they set g = 5g/s.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "How many GPUs were used to parallelize the LSTM model, and what word-per-second processing speed did this achieve compared to a single-GPU implementation?",
+        "ground_truth": "An 8-GPU machine was used (4 GPUs for the 4 LSTM layers, 4 GPUs to parallelize the softmax), achieving 6,300 words per second, compared to about 1,700 words per second on a single GPU.",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "How many total parameters did the resulting LSTM model have, and how many of these were purely recurrent connections?",
+        "ground_truth": "The LSTM had 384M parameters, of which 64M were pure recurrent connections (32M for the encoder LSTM and 32M for the decoder LSTM).",
+        "source": "Sequence to Sequence Learning with Neural Networks.pdf"
+    },
+    {
+        "question": "What vocabulary size did the authors use when training word vectors on the Google News corpus, and how many tokens did that corpus contain?",
+        "ground_truth": "The vocabulary was restricted to the 1 million most frequent words, and the Google News corpus used for training contained about 6 billion tokens.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "What starting learning rate did the authors use in their experiments, and how was it adjusted during training?",
+        "ground_truth": "They used a starting learning rate of 0.025 and decreased it linearly so that it approaches zero at the end of the last training epoch (three training epochs were used for the Table 2 and Table 4 experiments).",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "According to Table 3, what semantic and syntactic accuracy did the Skip-gram architecture achieve versus the CBOW architecture, using 640-dimensional word vectors trained on the same data?",
+        "ground_truth": "Skip-gram achieved 55% semantic accuracy and 59% syntactic accuracy, while CBOW achieved 24% semantic accuracy and 64% syntactic accuracy.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "Why did the authors use a Huffman binary tree rather than a balanced binary tree for the hierarchical softmax in their models?",
+        "ground_truth": "Huffman trees assign short binary codes to frequent words (following the observation that word frequency works well for forming classes in neural net language models), which further reduces the number of output units that need to be evaluated to about log2(Unigram perplexity(V)), compared to log2(V) for a balanced binary tree.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "In the DistBelief large-scale parallel training results (Table 6), what total accuracy did the 1000-dimensional Skip-gram model achieve compared to the 100-dimensional NNLM, both trained on the 6B-word Google News dataset?",
+        "ground_truth": "The 1000-dimensional Skip-gram model achieved 65.6% total accuracy, compared to 50.8% total accuracy for the 100-dimensional NNLM, a difference of 14.8 percentage points.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "What is the training complexity formula Q given for the Continuous Skip-gram model, and what does the variable C represent in that formula?",
+        "ground_truth": "The training complexity is Q = C × (D + D × log2(V)), where C is the maximum distance of the words (the size of the context window).",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "How many semantic questions and how many syntactic questions does the Semantic-Syntactic Word Relationship test set introduced in this paper contain?",
+        "ground_truth": "The test set contains 8869 semantic questions and 10675 syntactic questions.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "What was the best combined accuracy achieved on the Microsoft Research Sentence Completion Challenge by combining Skip-gram scores with RNNLM scores, and how does that compare to the Skip-gram model alone?",
+        "ground_truth": "The combination of Skip-gram and RNNLMs achieved 58.9% accuracy (59.2% on the development set and 58.7% on the test set), a new state-of-the-art result, whereas the Skip-gram model alone achieved 48.0% accuracy.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "In the Continuous Bag-of-Words (CBOW) model described in Section 3.1, how many future words and how many history words did the authors use as input to achieve their best performance?",
+        "ground_truth": "They used four future words and four history words as input, with the training criterion being to correctly classify the current (middle) word.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "How many model replicas were used during the DistBelief parallel training described in Section 2.3, and what adaptive learning rate procedure was employed?",
+        "ground_truth": "It is common to use one hundred or more model replicas (the paper reports using 50 to 100 model replicas in the large-scale experiments), and the adaptive learning rate procedure used was Adagrad.",
+        "source": "Efficient Estimation of Word Representations in  Vector Space.pdf"
+    },
+    {
+        "question": "How many layers, dimensional states, and attention heads did the 12-layer decoder-only transformer use in this paper's model specification?",
+        "ground_truth": "A 12-layer decoder-only transformer with masked self-attention heads, using 768-dimensional states and 12 attention heads.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "What token-level perplexity did the language model achieve on the BooksCorpus dataset?",
+        "ground_truth": "The language model achieved a token-level perplexity of 18.4 on the BooksCorpus corpus.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "What learning rate, optimizer, and warmup schedule were used during unsupervised pre-training?",
+        "ground_truth": "The Adam optimization scheme was used with a max learning rate of 2.5e-4, increased linearly from zero over the first 2000 updates and annealed to 0 using a cosine schedule.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "During fine-tuning, what learning rate and batch size were used for most tasks, and how many epochs were typically sufficient?",
+        "ground_truth": "For most tasks, a learning rate of 6.25e-5 and a batch size of 32 were used, and 3 epochs of training were sufficient for most cases.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "What value of λ (lambda) was used to weight the auxiliary language modeling objective during fine-tuning?",
+        "ground_truth": "λ was set to 0.5.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "What accuracy did the Finetuned Transformer LM achieve on the Story Cloze Test, and how many points did this improve over the previous best result (Hidden Coherence Model)?",
+        "ground_truth": "The Finetuned Transformer LM achieved 86.5% accuracy on Story Cloze, an absolute improvement of 8.9 points over the previous best result of 77.6% from the Hidden Coherence Model.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "According to the ablation study in Table 5, what was the average score of the Transformer without pre-training, and by how many points did this trail the full model (Transformer w/ aux LM)?",
+        "ground_truth": "The Transformer without pre-training achieved an average score of 59.9, which is a 14.8 point decrease compared to the full model's average score of 74.7.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "In the ablation comparing the Transformer to an LSTM (Table 5), what LSTM configuration was used, and on which single dataset did the LSTM outperform the Transformer?",
+        "ground_truth": "A single layer 2048-unit LSTM was used, and it only outperformed the Transformer on the MRPC dataset, with the Transformer showing a 5.6 average score drop when using the LSTM instead.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "What byte-pair encoding vocabulary size was used, and what dropout rate was applied for residual, embedding, and attention dropouts?",
+        "ground_truth": "A BPE vocabulary with 40,000 merges was used, along with residual, embedding, and attention dropouts at a rate of 0.1 for regularization.",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "For the Question Answering and Commonsense Reasoning input transformation, what is the exact sequence in which the document context z, question q, delimiter, and answer a_k are concatenated?",
+        "ground_truth": "The document context and question are concatenated with each possible answer, adding a delimiter token in between, producing the sequence [z; q; $; a_k].",
+        "source": "Improving Language Understanding by Generative Pre-Training.pdf"
+    },
+    {
+        "question": "How many hidden units did the encoder and decoder of the RNNencdec model each have?",
+        "ground_truth": "The encoder and decoder of the RNNencdec have 1000 hidden units each.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What vocabulary shortlist size was used for training the models, and what token was used for words outside the shortlist?",
+        "ground_truth": "A shortlist of 30,000 most frequent words in each language was used; any word not in the shortlist was mapped to a special [UNK] token.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What BLEU score did RNNsearch-50 achieve on the full test set (All), and what was Moses' score on the same metric?",
+        "ground_truth": "RNNsearch-50 achieved a BLEU score of 26.75 on all sentences, while Moses achieved 33.30.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What was the BLEU score of RNNsearch-50 on the No UNK subset of the test set, and how does it compare to Moses' No UNK score?",
+        "ground_truth": "RNNsearch-50 scored 34.16 BLEU on the No UNK subset, close to Moses' score of 35.63.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "How many words did the combined WMT '14 parallel corpora total before data selection, and to how many words was the corpus reduced using the Axelrod et al. (2011) method?",
+        "ground_truth": "The combined corpus totaled 850M words, and it was reduced to 348M words using the Axelrod et al. (2011) data selection method.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What size minibatch was used for each SGD update, and approximately how many days did each model take to train?",
+        "ground_truth": "Each SGD update direction was computed using a minibatch of 80 sentences, and each model was trained for approximately 5 days.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "In the alignment model formula a(s_{i-1}, h_j) = v_a^T tanh(W_a s_{i-1} + U_a h_j), why do the authors note that U_a h_j can be precomputed in advance?",
+        "ground_truth": "Because U_a h_j does not depend on i (the target position), it can be pre-computed in advance to minimize computational cost.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "According to the paper, what are the word embedding dimensionality (m), hidden layer size (n), and maxout hidden layer size (l) used for all models in the experiments, and how many hidden units (n') were used in the alignment model?",
+        "ground_truth": "The word embedding dimensionality m is 620, the hidden layer size n is 1000, the maxout hidden layer size l is 500, and the alignment model has n' = 1000 hidden units.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "How were the recurrent weight matrices (e.g., U, Uz, Ur) initialized, and how were Wa and Ua initialized according to the training procedure described in Appendix B?",
+        "ground_truth": "The recurrent weight matrices were initialized as random orthogonal matrices; Wa and Ua were initialized by sampling each element from a Gaussian distribution with mean 0 and variance 0.001^2.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What GPU was used to train RNNsearch-50, and how many updates (in units of 10^5) and epochs did it take according to Table 2?",
+        "ground_truth": "RNNsearch-50 was trained on a Quadro K-6000 GPU, taking 2.88 (×10^5) updates over 2.2 epochs.",
+        "source": "NEURAL MACHINE TRANSLATION BY JOINTLY LEARNING TO ALIGN AND TRANSLATE.pdf"
+    },
+    {
+        "question": "What are the exact GLUE Test scores for BERT_LARGE on MNLI-m/mm and CoLA?",
+        "ground_truth": "BERT_LARGE achieved 86.7/85.9 on MNLI-(m/mm) and 60.5 on CoLA.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "What learning rate, batch size, and number of epochs were used to fine-tune BERT on SQuAD v1.1?",
+        "ground_truth": "BERT was fine-tuned for 3 epochs with a learning rate of 5e-5 and a batch size of 32 on SQuAD v1.1.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "In the token masking procedure for the masked language model, what are the three replacement strategies and their exact probabilities when a token is chosen for prediction?",
+        "ground_truth": "If the i-th token is chosen: it is replaced with the [MASK] token 80% of the time, a random token 10% of the time, and left as the unchanged token 10% of the time.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "How many words are in the BooksCorpus and English Wikipedia datasets used for BERT pre-training, respectively?",
+        "ground_truth": "BooksCorpus contains 800M words and English Wikipedia contains 2,500M words.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "According to the ablation study, what MNLI-m Dev accuracy resulted from removing the Next Sentence Prediction (NSP) task, and what was the further drop when also switching to a left-to-right (LTR) language model without NSP?",
+        "ground_truth": "Removing NSP ('No NSP') gave 83.9 MNLI-m Dev accuracy (vs. 84.4 for BERT_BASE); switching further to 'LTR & No NSP' dropped accuracy to 82.1.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "In the feature-based approach ablation on CoNLL-2003 NER using BERT_BASE, what Dev F1 score was achieved by concatenating the last four hidden layers, and how does this compare to the fine-tuning approach's Dev F1?",
+        "ground_truth": "Concatenating the last four hidden layers achieved 96.1 Dev F1 in the feature-based approach, only 0.3 F1 behind the fine-tuning approach's 96.4 (BERT_BASE) Dev F1.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "What optimizer settings (learning rate, β1, β2, L2 weight decay, and warmup steps) were used during BERT pre-training?",
+        "ground_truth": "BERT used Adam with a learning rate of 1e-4, β1 = 0.9, β2 = 0.999, L2 weight decay of 0.01, and learning rate warmup over the first 10,000 steps, with linear decay afterward.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "How many Cloud TPUs were used to train BERT_BASE and BERT_LARGE respectively, and how long did each pre-training run take?",
+        "ground_truth": "BERT_BASE was trained on 4 Cloud TPUs in Pod configuration (16 TPU chips total), and BERT_LARGE was trained on 16 Cloud TPUs (64 TPU chips total); each pre-training took 4 days to complete.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "What sequence length strategy was used during pre-training to speed up training, and what percentage of steps used each length?",
+        "ground_truth": "The model was pre-trained with a sequence length of 128 for 90% of the steps, then trained on sequences of 512 for the remaining 10% of steps to learn the positional embeddings.",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "In the masking strategy ablation (Table 8), what MNLI Dev accuracy resulted from using 100% MASK (no SAME or RND replacement) compared to the default 80/10/10 strategy?",
+        "ground_truth": "Using 100% MASK with 0% SAME and 0% RND gave 84.3 MNLI Dev accuracy, compared to 84.2 for the default 80% MASK/10% SAME/10% RND strategy (fine-tuning results).",
+        "source": "BERT_ Pre-training of Deep Bidirectional Transformers for  Language Understanding.pdf"
+    },
+    {
+        "question": "What dropout rate (P_drop) was used for the base Transformer model's residual dropout?",
+        "ground_truth": "For the base model, a residual dropout rate of P_drop = 0.1 was used, applied to the output of each sub-layer before it is added to the sub-layer input and normalized, and also to the sums of the embeddings and positional encodings.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "How many GPUs were used to train the models, and how long did training take for the base model versus the big model?",
+        "ground_truth": "Both models were trained on one machine with 8 NVIDIA P100 GPUs. The base models were trained for 100,000 steps (about 12 hours), while the big models were trained for 300,000 steps (3.5 days).",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "What BLEU score did the Transformer (big) model achieve on the WMT 2014 English-to-French translation task, and what was its training cost in FLOPs?",
+        "ground_truth": "The Transformer (big) model achieved a BLEU score of 41.8 on WMT 2014 English-to-French, with a training cost of 2.3 · 10^19 FLOPs.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "Why did the authors scale the dot products by 1/sqrt(d_k) in scaled dot-product attention?",
+        "ground_truth": "They suspected that for large values of d_k, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients, so they scaled the dot products by 1/sqrt(d_k) to counteract this effect.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "According to Table 3 (row A) ablations, how did using only a single attention head (h=1) versus the best configuration affect BLEU score on the development set?",
+        "ground_truth": "With a single attention head (h=1, dk=dv=512), the model achieved a dev BLEU of 24.9, which is 0.9 BLEU worse than the best reported setting.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "What values of dk and dv were used per attention head in this work, given h=8 heads and dmodel=512?",
+        "ground_truth": "The paper used h = 8 parallel attention heads, with dk = dv = dmodel/h = 64 for each head.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "What byte-pair encoding vocabulary size was used for the WMT 2014 English-German dataset, and what word-piece vocabulary size was used for English-French?",
+        "ground_truth": "The English-German dataset used byte-pair encoding with a shared source-target vocabulary of about 37,000 tokens, while the English-French dataset (36M sentences) used a 32,000 word-piece vocabulary.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "According to Table 1, what is the maximum path length between any two input and output positions for a self-attention layer, compared to a recurrent layer?",
+        "ground_truth": "A self-attention layer has a maximum path length of O(1), constant regardless of sequence length, whereas a recurrent layer has a maximum path length of O(n), where n is the sequence length.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "What were the Adam optimizer hyperparameters (β1, β2, ε) and the warmup_steps value used during training?",
+        "ground_truth": "The Adam optimizer was used with β1 = 0.9, β2 = 0.98, and ε = 10^-9, with warmup_steps = 4000 for the learning rate schedule.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "In the English constituency parsing experiment, what F1 score did the 4-layer Transformer achieve on WSJ Section 23 in the semi-supervised setting, and what beam size and alpha value were used during inference?",
+        "ground_truth": "The 4-layer Transformer achieved an F1 score of 92.7 on WSJ Section 23 in the semi-supervised setting, using a beam size of 21 and α = 0.3 during inference.",
+        "source": "Attention Is All You Need.pdf"
+    },
+    {
+        "question": "How many inference computations does BERT require to find the most similar pair in a collection of 10,000 sentences, and roughly how long does this take on a V100 GPU?",
+        "ground_truth": "It requires n·(n−1)/2 = 49,995,000 inference computations, which takes about 65 hours on a modern V100 GPU.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "What batch size, optimizer, learning rate, and warm-up schedule were used to fine-tune SBERT on the SNLI and Multi-Genre NLI datasets?",
+        "ground_truth": "SBERT was fine-tuned with a batch size of 16, using the Adam optimizer with a learning rate of 2e-5, and a linear learning rate warm-up over 10% of the training data, for one epoch with a 3-way softmax-classifier objective.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "What average Spearman correlation score did SBERT-NLI-large achieve on the STS tasks reported in Table 1, and how does this compare to Universal Sentence Encoder?",
+        "ground_truth": "SBERT-NLI-large achieved an average Spearman correlation of 76.55 across the STS12-16, STSb, and SICK-R datasets, compared to 71.22 for Universal Sentence Encoder.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "According to the ablation study in Table 6, what concatenation configuration for the classification objective function produced the best performance on NLI, and what score did it achieve?",
+        "ground_truth": "The (u, v, |u − v|) concatenation configuration performed best, achieving a score of 80.78 on NLI.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "Why did the authors find that adding the element-wise product u*v to the concatenation for the classification objective function decreased performance, compared to InferSent and Universal Sentence Encoder's approach?",
+        "ground_truth": "The paper states that although InferSent and Universal Sentence Encoder both use (u, v, |u−v|, u∗v) as input for their softmax classifier, in the SBERT architecture adding the element-wise u*v decreased the performance, with the element-wise difference |u−v| identified as the most important component.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "What accuracy did SBERT-WikiSec-large achieve on the Wikipedia section triplets test set, and how many training and test triplets were used?",
+        "ground_truth": "SBERT-WikiSec-large achieved an accuracy of 0.8078, trained on about 1.8 million training triplets and evaluated on 222,957 test triplets.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "On the Argument Facet Similarity (AFS) corpus, by how many Spearman correlation points did SBERT's performance drop when moving from the 10-fold cross-validation setup to the cross-topic evaluation setup?",
+        "ground_truth": "SBERT's performance dropped by about 7 points in Spearman correlation when moving from the 10-fold cross-validation setup to the cross-topic evaluation setup.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "How many sentence pairs are in the SNLI dataset and how many sentence pairs are in the MultiNLI dataset used to train SBERT, and what are the three labels used to annotate SNLI?",
+        "ground_truth": "SNLI contains 570,000 sentence pairs annotated with the labels contradiction, entailment, and neutral; MultiNLI contains 430,000 sentence pairs covering a range of genres of spoken and written text.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "According to the computational efficiency comparison in Table 7, what were the sentences-per-second speeds of SBERT-base with smart batching on CPU and GPU, and what hardware was used for these measurements?",
+        "ground_truth": "SBERT-base with smart batching achieved 83 sentences per second on CPU and 2042 sentences per second on GPU, measured on a server with an Intel i7-5820K CPU @ 3.30GHz and an Nvidia Tesla V100 GPU with CUDA 9.2 and cuDNN.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "In the pooling strategy ablation for the regression objective function trained on the STS benchmark, what score did the MAX strategy achieve compared to MEAN pooling, and how does this contrast with prior findings for InferSent's BiLSTM layer?",
+        "ground_truth": "With the regression objective function, MAX pooling achieved 69.92 versus 87.44 for MEAN pooling on the STSb development set, performing significantly worse; this contrasts with prior findings that MAX pooling was beneficial for InferSent's BiLSTM layer.",
+        "source": "Sentence-BERT_ Sentence Embeddings using Siamese BERT-Networks.pdf"
+    },
+    {
+        "question": "How many total documents result from splitting the Wikipedia dump into disjoint 100-word chunks for RAG's non-parametric memory?",
+        "ground_truth": "21 million documents.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "Which Wikipedia dump date was used to build the non-parametric knowledge source for RAG's experiments?",
+        "ground_truth": "The December 2018 Wikipedia dump.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "How many retrieved documents (K) did RAG-Sequence and RAG-Token models use when reporting test results for Open-domain QA, respectively?",
+        "ground_truth": "RAG-Token models used 15 retrieved documents for test results, while RAG-Sequence models used 50 retrieved documents.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "On how many GPUs, and of what type, did the authors train all RAG models and BART baselines using Fairseq?",
+        "ground_truth": "Training was distributed across 8, 32GB NVIDIA V100 GPUs, using mixed precision floating point arithmetic.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "What Exact Match score did RAG-Sequence achieve on Natural Questions (NQ), and how does this compare to the DPR baseline's EM score on the same dataset?",
+        "ground_truth": "RAG-Sequence achieved 44.5 EM on Natural Questions, compared to DPR's 41.5 EM.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "According to the paper's ablation on retrieval mechanisms, why did BM25 perform best on FEVER specifically, compared to RAG's learned dense retriever?",
+        "ground_truth": "The paper states that for FEVER, BM25 performs best, perhaps because FEVER claims are heavily entity-centric and thus well-suited for word overlap-based retrieval.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "In the index hot-swapping experiment, what percentage accuracy did RAG achieve when using the 2016 Wikipedia index to answer questions about 2016 world leaders, versus using a mismatched 2018 index for 2016 leaders?",
+        "ground_truth": "RAG answered 70% correctly using the 2016 index for 2016 world leaders, but only 4% correctly when using the mismatched 2016 index paired with 2018 leaders (and the appendix/table also gives 12% for the 2018 index with 2016 leaders).",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "How many trainable parameters does the RAG model contain in total, combining the DPR query/document encoders and the BART-large generator?",
+        "ground_truth": "RAG contains 626M trainable parameters total: 110M each for the BERT-base query and document encoders of DPR (though the document encoder is not actually trained) plus 406M trainable parameters from BART-large.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "In the human evaluation of Jeopardy question generation over 452 generation pairs, in what percentage of cases did evaluators judge BART to be more factual than RAG, versus RAG being more factual than BART?",
+        "ground_truth": "Evaluators found BART more factual than RAG in only 7.1% of cases, while RAG was judged more factual in 42.7% of cases.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "What is the ratio of distinct to total tri-grams generated by RAG-Sequence versus BART on the Jeopardy Question Generation task, as reported in Table 5?",
+        "ground_truth": "RAG-Sequence achieved a distinct-to-total tri-gram ratio of 53.8% on Jeopardy Question Generation, compared to BART's 32.4%.",
+        "source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.pdf"
+    },
+    {
+        "question": "What sampling threshold τs and filtering threshold τf are used by default when generating Toolformer's training data?",
+        "ground_truth": "By default, τs = 0.05 (API calls are sampled only at positions where the probability of the <API> token is at least 5%) and τf = 1.0 (an API call is kept only if it reduces the loss by at least 1.0).",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "How many parameters does the GPT-J model used as the base for Toolformer have, and what dataset is it finetuned on to create the augmented training set C*?",
+        "ground_truth": "GPT-J has 6.7B parameters, and it is finetuned on a subset of CCNet (Wenzek et al., 2020) augmented with API calls to produce Toolformer.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "According to Table 2 in the paper, how many examples with API calls remain in C* for the Calculator tool at filtering threshold τf = 1.0?",
+        "ground_truth": "At τf = 1.0, there are 994 examples with Calculator API calls in C*.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "By how many points does Toolformer outperform the best GPT-J baseline on the SQuAD subset of LAMA, according to Table 3?",
+        "ground_truth": "Toolformer improves upon the best baseline by 11.7 points on the SQuAD subset (33.8 vs. the best baseline's 22.1).",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "What percentage of examples on the math reasoning benchmarks (ASDiv, SVAMP, MAWPS) does Toolformer choose to call the calculator tool?",
+        "ground_truth": "Toolformer decides to call the calculator tool for 97.9% of examples across the math benchmarks.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "What weighting function w_t is used during API call filtering to ensure calls occur close to where the API's information is useful?",
+        "ground_truth": "The weighting function is w_t = w̃_t / Σ_s w̃_s, where w̃_t = max(0, 1 − 0.2·t), giving decreasing weight to tokens further from the API call position.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "In the scaling laws experiment, at approximately what model size does the ability to leverage the provided tools begin to emerge?",
+        "ground_truth": "The ability to leverage tools only emerges at around 775M parameters; smaller GPT-2 models achieve similar performance with and without tool use.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "What percentage of the time does Toolformer use the calendar API for the TEMPLAMA dataset, and why does the paper say this limits its usefulness there?",
+        "ground_truth": "The calendar tool is used for only 0.2% of TEMPLAMA examples; the paper attributes improvements instead mainly to the Wikipedia search and QA tools, since named entities in TEMPLAMA are often too specific for the date alone to help, and the model is restricted to at most one API call per example.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "What batch size and learning rate (with warmup schedule) are used when finetuning M on C* according to the paper's experimental setup?",
+        "ground_truth": "The model is finetuned using a batch size of 128 and a learning rate of 1·10⁻⁵ with linear warmup for the first 10% of training.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "According to Table 9, what percentage of WebQS examples receive an API call when using decoding parameter k=3, and what is Toolformer's overall performance (All) on WebQS at that k value?",
+        "ground_truth": "At k=3, API calls are made on 99.3% of WebQS examples, and Toolformer's overall performance (All) is 26.3.",
+        "source": "Toolformer_ Language Models Can Teach Themselves to Use Tools.pdf"
+    },
+    {
+        "question": "By what absolute success rate did ReAct outperform imitation and reinforcement learning methods on ALFWorld and WebShop respectively, as stated in the abstract?",
+        "ground_truth": "ReAct outperforms imitation and reinforcement learning methods by an absolute success rate of 34% on ALFWorld and 10% on WebShop.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "How many trajectories were used to bootstrap finetuning of smaller PaLM models on ReAct-generated data, and what was the finetuning batch size used?",
+        "ground_truth": "3,000 trajectories with correct answers generated by ReAct were used for finetuning, using a batch size of 64.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "What HotpotQA exact match score and Fever accuracy did the combined CoT-SC → ReAct method achieve using PaLM-540B?",
+        "ground_truth": "CoT-SC → ReAct achieved 34.2 EM on HotpotQA and 64.6 accuracy on Fever.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "How many steps did the authors set as the limit before backing off from ReAct to CoT-SC for HotpotQA and FEVER respectively, and what percentage of correct trajectories actually required that many steps?",
+        "ground_truth": "The authors set 7 steps for HotpotQA and 5 steps for FEVER as the limit before backing off to CoT-SC; of all trajectories with correct final answers, those requiring exactly 7 steps on HotpotQA and 5 steps on FEVER made up only 0.84% and 1.33% respectively.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "In the human-annotated failure mode analysis on HotpotQA (Table 2), what percentage of ReAct's failures were categorized as 'search result error' versus 'hallucination', and how does this compare to CoT's hallucination failure rate?",
+        "ground_truth": "For ReAct, 23% of failures were search result errors and 0% were hallucination; for CoT, hallucination accounted for 56% of failures.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "What was the best ReAct trial success rate on ALFWorld, and how does it compare to the best Act trial and best BUTLER trial success rates?",
+        "ground_truth": "The best ReAct trial achieved an average success rate of 71% on ALFWorld, significantly outperforming the best Act trial (45%) and the best BUTLER trial (37%).",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "What were the three types of actions defined in the Wikipedia web API designed for the HotpotQA and Fever tasks?",
+        "ground_truth": "The three actions were: (1) search[entity], which returns the first 5 sentences from the corresponding Wikipedia entity page or suggests top-5 similar entities if it doesn't exist; (2) lookup[string], which returns the next sentence containing the string, simulating Ctrl+F; and (3) finish[answer], which finishes the task with the given answer.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "According to the ALFWorld results (Table 3), what was the overall 'All' success rate percentage for ReAct-IM (average) compared to ReAct (average), and what were the two main shortcomings the authors observed in ReAct-IM's reasoning?",
+        "ground_truth": "ReAct-IM (avg) achieved 48% overall success rate compared to ReAct (avg) at 57%. The authors observed ReAct-IM often made mistakes identifying when subgoals were finished or what the next subgoal should be (due to lack of high-level goal decomposition), and struggled to determine where an item would likely be within the environment (due to lack of commonsense reasoning).",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "How many ReAct-format trajectories did the authors manually compose as few-shot exemplars for HotpotQA and Fever respectively, and how many trajectories were annotated per task type for ALFWorld?",
+        "ground_truth": "The authors randomly selected and manually composed 6 trajectories for HotpotQA and 3 for Fever as few-shot exemplars; for ALFWorld, they randomly annotated three trajectories from the training set for each task type.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    },
+    {
+        "question": "On the WebShop task, what average score and success rate (SR) did ReAct achieve compared to Act, and how did these compare to the IL+RL baseline's success rate?",
+        "ground_truth": "ReAct achieved a score of 66.6 and success rate of 40.0 on WebShop, compared to Act's score of 62.3 and SR of 30.1; the IL+RL baseline achieved an SR of 28.7.",
+        "source": "REACT_ SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS.pdf"
+    }
+]
