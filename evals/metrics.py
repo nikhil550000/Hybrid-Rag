@@ -1,6 +1,11 @@
-"""Evaluation metrics — Ragas faithfulness + citation accuracy.
+"""Evaluation metrics — DeepEval LLM-as-judge + citation accuracy.
 
 Satisfies: FR-27, FR-28
+
+Uses DeepEval with AnthropicModel as the evaluation judge to compute:
+  - Faithfulness: is the answer grounded in the retrieved contexts?
+  - Answer Relevancy: does the answer actually address the question?
+  - Context Recall: do the retrieved contexts contain the ground truth?
 """
 import json
 import os
@@ -8,11 +13,9 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 
-from ragas import evaluate, EvaluationDataset, SingleTurnSample
-from ragas.metrics.collections import Faithfulness, AnswerRelevancy, ContextRecall
-from ragas.llms import LangchainLLMWrapper
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
+from deepeval.models import AnthropicModel
+from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric, ContextualRecallMetric
+from deepeval.test_case import LLMTestCase
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -21,6 +24,8 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+# ─── Data classes ─────────────────────────────────────────────────────────────
 
 @dataclass
 class EvalSample:
@@ -60,65 +65,91 @@ class EvalReport:
         return path
 
 
-def get_ragas_llm(provider: str, model: str):
-    """Build a LangChain LLM wrapper for Ragas evaluation."""
+# ─── DeepEval LLM-as-judge evaluation ────────────────────────────────────────
+
+def _build_judge_model(provider: str, model: str) -> AnthropicModel:
+    """Build the DeepEval judge model from settings."""
     if provider == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set — required for Ragas eval")
-        llm = ChatAnthropic(model=model, api_key=api_key, temperature=0.0)
-    elif provider == "google":
-        api_key = os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY not set — required for Ragas eval")
-        llm = ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0.0)
+            raise ValueError("ANTHROPIC_API_KEY not set — required for evaluation")
+        return AnthropicModel(model=model, api_key=api_key)
     else:
-        raise ValueError(f"Unsupported Ragas eval provider: {provider}")
-    return LangchainLLMWrapper(llm)
+        raise ValueError(
+            f"Unsupported eval provider: {provider}. "
+            f"DeepEval supports: anthropic (native), openai, etc."
+        )
 
 
-def run_ragas_evaluation(
+def run_deepeval_evaluation(
     samples: list[EvalSample],
     provider: str,
     model: str,
 ) -> dict[str, float]:
     """
-    Run Ragas faithfulness + answer_relevancy + context_recall.
+    Run DeepEval faithfulness + answer_relevancy + contextual_recall.
     Only evaluates non-refused samples that have retrieved contexts.
 
-    Uses the same LLM provider configured in settings.yaml as the evaluator judge.
+    Uses AnthropicModel as the LLM judge.
     """
     answered = [s for s in samples if not s.refused and s.retrieved_contexts]
 
     if not answered:
-        logger.warning("No answered samples with contexts — skipping Ragas eval")
+        logger.warning("No answered samples with contexts — skipping evaluation")
         return {"faithfulness": 0.0, "answer_relevancy": 0.0, "context_recall": 0.0}
 
-    ragas_samples = []
-    for s in answered:
-        ragas_samples.append(SingleTurnSample(
-            user_input=s.question,
-            response=s.generated_answer,
-            retrieved_contexts=s.retrieved_contexts,
-            reference=s.ground_truth,
-        ))
+    judge_model = _build_judge_model(provider, model)
 
-    dataset = EvaluationDataset(samples=ragas_samples)
-    evaluator_llm = get_ragas_llm(provider, model)
+    # Initialize metrics with the Anthropic judge
+    faithfulness = FaithfulnessMetric(model=judge_model, threshold=0.5, include_reason=True)
+    relevancy = AnswerRelevancyMetric(model=judge_model, threshold=0.5, include_reason=True)
+    recall = ContextualRecallMetric(model=judge_model, threshold=0.5, include_reason=True)
 
-    logger.info(f"Running Ragas evaluation on {len(ragas_samples)} samples...")
-    result = evaluate(
-        dataset=dataset,
-        metrics=[Faithfulness(), AnswerRelevancy(), ContextRecall()],
-        llm=evaluator_llm,
-    )
+    faithfulness_scores = []
+    relevancy_scores = []
+    recall_scores = []
+
+    for i, s in enumerate(answered):
+        logger.info(f"Judging [{i+1}/{len(answered)}] {s.question[:50]}...")
+
+        test_case = LLMTestCase(
+            input=s.question,
+            actual_output=s.generated_answer,
+            retrieval_context=s.retrieved_contexts,
+            expected_output=s.ground_truth,
+        )
+
+        # Measure each metric
+        try:
+            faithfulness.measure(test_case)
+            faithfulness_scores.append(faithfulness.score)
+            logger.info(f"  Faithfulness: {faithfulness.score:.2f} — {faithfulness.reason}")
+        except Exception as e:
+            logger.warning(f"  Faithfulness failed: {e}")
+            faithfulness_scores.append(0.0)
+
+        try:
+            relevancy.measure(test_case)
+            relevancy_scores.append(relevancy.score)
+            logger.info(f"  Relevancy:    {relevancy.score:.2f} — {relevancy.reason}")
+        except Exception as e:
+            logger.warning(f"  Relevancy failed: {e}")
+            relevancy_scores.append(0.0)
+
+        try:
+            recall.measure(test_case)
+            recall_scores.append(recall.score)
+            logger.info(f"  Recall:       {recall.score:.2f} — {recall.reason}")
+        except Exception as e:
+            logger.warning(f"  Recall failed: {e}")
+            recall_scores.append(0.0)
 
     scores = {
-        "faithfulness": round(result["faithfulness"], 4),
-        "answer_relevancy": round(result["answer_relevancy"], 4),
-        "context_recall": round(result["context_recall"], 4),
+        "faithfulness": round(sum(faithfulness_scores) / len(faithfulness_scores), 4),
+        "answer_relevancy": round(sum(relevancy_scores) / len(relevancy_scores), 4),
+        "context_recall": round(sum(recall_scores) / len(recall_scores), 4),
     }
-    logger.info(f"Ragas scores: {scores}")
+    logger.info(f"DeepEval scores: {scores}")
     return scores
 
 

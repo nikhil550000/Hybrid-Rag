@@ -31,7 +31,7 @@ from pipeline.query import QueryPipeline
 
 # Import from evals/ (sibling directory)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from metrics import EvalSample, EvalReport, run_ragas_evaluation, compute_citation_accuracy
+from metrics import EvalSample, EvalReport, run_deepeval_evaluation, compute_citation_accuracy
 
 logger = get_logger(__name__)
 
@@ -98,9 +98,9 @@ def main():
     citation_acc = compute_citation_accuracy(samples)
     logger.info(f"Citation accuracy: {citation_acc:.4f}")
 
-    # Run Ragas evaluation (LLM-as-judge)
-    logger.info("Running Ragas LLM-as-judge evaluation...")
-    ragas_scores = run_ragas_evaluation(
+    # Run DeepEval LLM-as-judge evaluation
+    logger.info("Running DeepEval LLM-as-judge evaluation...")
+    judge_scores = run_deepeval_evaluation(
         samples=samples,
         provider=settings.llm_provider,
         model=settings.llm_model,
@@ -119,9 +119,9 @@ def main():
         avg_citations_per_answer=round(
             sum(s.citations_valid for s in answered_samples) / len(answered_samples), 2
         ) if answered_samples else 0.0,
-        faithfulness_score=ragas_scores["faithfulness"],
-        answer_relevancy_score=ragas_scores["answer_relevancy"],
-        context_recall_score=ragas_scores["context_recall"],
+        faithfulness_score=judge_scores["faithfulness"],
+        answer_relevancy_score=judge_scores["answer_relevancy"],
+        context_recall_score=judge_scores["context_recall"],
         citation_accuracy=round(citation_acc, 4),
         samples=[{
             "question": s.question,
@@ -149,7 +149,7 @@ def main():
     print(f"  Avg citations/ans:   {report.avg_citations_per_answer}")
     print(f"{'─'*60}")
     print(f"  Citation accuracy:   {report.citation_accuracy:.4f}")
-    print(f"  Faithfulness (Ragas):{report.faithfulness_score:.4f}")
+    print(f"  Faithfulness:        {report.faithfulness_score:.4f}")
     print(f"  Answer relevancy:    {report.answer_relevancy_score:.4f}")
     print(f"  Context recall:      {report.context_recall_score:.4f}")
     print(f"{'─'*60}")
