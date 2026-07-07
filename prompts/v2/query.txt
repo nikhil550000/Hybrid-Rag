@@ -1,0 +1,16 @@
+Context passages (use ONLY these for your answer):
+
+{formatted_chunks}
+
+---
+
+Question: {user_query}
+
+Instructions:
+- Answer using ONLY the context passages above.
+- Cite every claim with [SOURCE: chunk_id] using IDs from the passages above.
+- If the context contains tables or lists with multiple entries, match the
+  EXACT entry the question asks about — do not confuse similar variants.
+- If insufficient context, respond with INSUFFICIENT_CONTEXT.
+
+Answer:

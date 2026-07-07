@@ -20,7 +20,7 @@ chunking:
   chunk_overlap: 100           # overlap to preserve boundary context
 
 prompts:
-  version: v1                  # maps to prompts/v1/
+  version: v2                  # maps to prompts/v2/
 
 store:
   vector_store_path: .chroma
