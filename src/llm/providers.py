@@ -6,7 +6,7 @@ Satisfies: FR-19
 import time
 
 import anthropic
-import google.generativeai as genai
+from google import genai
 
 from llm.client import LLMResponse
 from utils.logger import get_logger
@@ -57,13 +57,12 @@ class AnthropicClient:
 
 
 class GoogleClient:
-    """Google Gemini client with retry logic."""
+    """Google Gemini client using the new google-genai SDK with retry logic."""
 
     def __init__(self, model: str, api_key: str, temperature: float = 0.0):
         self._model_name = model
         self._temperature = temperature
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model)
+        self._client = genai.Client(api_key=api_key)
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
         """Call Google Gemini API with retry (3 attempts, exponential backoff)."""
@@ -71,14 +70,15 @@ class GoogleClient:
 
         for attempt in range(MAX_RETRIES):
             try:
-                response = self._model.generate_content(
-                    full_prompt,
-                    generation_config=genai.types.GenerationConfig(
+                response = self._client.models.generate_content(
+                    model=self._model_name,
+                    contents=full_prompt,
+                    config=genai.types.GenerateContentConfig(
                         temperature=self._temperature,
                         max_output_tokens=2048,
                     ),
                 )
-                # Estimate token counts (Gemini doesn't always return exact counts)
+                # Extract token counts from usage metadata
                 tokens_in = (
                     response.usage_metadata.prompt_token_count
                     if response.usage_metadata
@@ -108,3 +108,4 @@ class GoogleClient:
                     raise RuntimeError(
                         f"LLM API unavailable after {MAX_RETRIES} retries: {e}"
                     ) from e
+

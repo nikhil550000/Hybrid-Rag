@@ -21,8 +21,13 @@ from retrieval.reranker import CrossEncoderReranker
 from retrieval.sparse import SparseRetriever
 from store.bm25 import BM25Store
 from store.vector import VectorStore
+from utils.logger import setup_logging, new_correlation_id, get_logger
+from utils.helpers import handle_exceptions
+
+logger = get_logger(__name__)
 
 
+@handle_exceptions
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python src/main.py \"Your question here\"")
@@ -30,6 +35,11 @@ def main() -> None:
 
     query = sys.argv[1]
     settings = load_settings()
+
+    # Initialize logging with file persistence + correlation ID
+    log_file = setup_logging(log_level=settings.log_level)
+    cid = new_correlation_id()
+    logger.info(f"Query session started | correlation_id={cid} | log_file={log_file}")
 
     # --- Retrieval components ---
     embedder = SentenceTransformerEmbedder(model_name=settings.embedding_model)

@@ -16,10 +16,20 @@ from ingestion.indexer import BM25Indexer
 from store.vector import VectorStore
 from llm.embeddings import SentenceTransformerEmbedder
 from pipeline.ingest import IngestPipeline
+from utils.logger import setup_logging, new_correlation_id, get_logger
+from utils.helpers import handle_exceptions
+
+logger = get_logger(__name__)
 
 
+@handle_exceptions
 def main() -> None:
     settings = load_settings()
+
+    # Initialize logging with file persistence + correlation ID
+    log_file = setup_logging(log_level=settings.log_level)
+    cid = new_correlation_id()
+    logger.info(f"Ingest session started | correlation_id={cid} | log_file={log_file}")
 
     # Construct components from settings
     loader = PDFLoader()
