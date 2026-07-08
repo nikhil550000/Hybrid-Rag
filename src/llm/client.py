@@ -15,6 +15,7 @@ class LLMResponse:
     tokens_input: int
     tokens_output: int
     model: str
+    cost_usd: float = 0.0
 
 
 class LLMClient(Protocol):

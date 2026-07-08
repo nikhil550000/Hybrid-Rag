@@ -23,6 +23,10 @@ class GeneratorResponse:
     citations: list[Citation] = field(default_factory=list)
     refused: bool = False
     refusal_reason: str = ""
+    tokens_input: int = 0
+    tokens_output: int = 0
+    cost_usd: float = 0.0
+    model: str = ""
 
 
 class Generator:
@@ -76,6 +80,10 @@ class Generator:
                 answer=raw_answer,
                 refused=True,
                 refusal_reason=raw_answer,
+                tokens_input=llm_response.tokens_input,
+                tokens_output=llm_response.tokens_output,
+                cost_usd=llm_response.cost_usd,
+                model=llm_response.model,
             )
 
         # Step 4: Validate citations
@@ -92,4 +100,8 @@ class Generator:
             answer=clean_answer.strip(),
             citations=valid_citations,
             refused=False,
+            tokens_input=llm_response.tokens_input,
+            tokens_output=llm_response.tokens_output,
+            cost_usd=llm_response.cost_usd,
+            model=llm_response.model,
         )
