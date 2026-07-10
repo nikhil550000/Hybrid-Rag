@@ -1,0 +1,38 @@
+name: Eval Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run ingestion
+        run: uv run python scripts/ingest.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Run evaluation
+        run: uv run python evals/run_eval.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+        # evals/run_eval.py exits non-zero if faithfulness < threshold
+        # That non-zero exit blocks the PR merge automatically
+
+      - name: Upload eval report
+        uses: actions/upload-artifact@v4
+        if: always()   # upload even on failure so you can see what dropped
+        with:
+          name: eval-report-${{ github.sha }}
+          path: evals/report_*.json
