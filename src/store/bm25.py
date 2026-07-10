@@ -45,6 +45,14 @@ class BM25Store:
 
         logger.info(f"Loaded BM25 index from {path} ({len(self._chunk_ids)} chunks)")
 
+    def load_from_memory(self, bm25: BM25Okapi, chunk_ids: list[str], chunk_texts: list[str], chunk_metadata: list[dict]) -> None:
+        """Load directly from in-memory objects (for ephemeral sessions)."""
+        self._bm25 = bm25
+        self._chunk_ids = chunk_ids
+        self._chunk_texts = chunk_texts
+        self._chunk_metadata = chunk_metadata
+        logger.info(f"Loaded BM25 index from memory ({len(self._chunk_ids)} chunks)")
+
     def query(self, query_text: str, top_k: int) -> list[RetrievedChunk]:
         """
         Tokenize query, score all chunks, return top_k.

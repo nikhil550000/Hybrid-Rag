@@ -22,3 +22,9 @@ export interface HealthResponse {
   version: string;
   chunks_indexed: number;
 }
+
+export interface UploadResponse {
+  session_id: string;
+  files_processed: number;
+  chunks_created: number;
+}

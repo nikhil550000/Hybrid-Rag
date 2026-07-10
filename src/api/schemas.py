@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     """Incoming query from the frontend."""
     query: str = Field(..., min_length=1, max_length=2000, description="User's question")
+    session_id: str | None = Field(None, description="Optional session ID for isolated uploaded documents")
 
 
 class CitationSchema(BaseModel):
@@ -38,3 +39,9 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     chunks_indexed: int
+
+class UploadResponse(BaseModel):
+    """Response returned when successfully uploading PDFs for a session."""
+    session_id: str
+    files_processed: int
+    chunks_created: int

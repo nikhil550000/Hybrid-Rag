@@ -10,6 +10,7 @@ from ingestion.loader import PDFLoader
 from ingestion.chunker import Chunker
 from ingestion.indexer import BM25Indexer
 from store.vector import VectorStore
+from store.bm25 import BM25Store
 from llm.embeddings import EmbeddingClient
 from utils.logger import get_logger
 
@@ -43,8 +44,13 @@ class IngestPipeline:
         self._bm25_indexer = bm25_indexer
         self._vector_store = vector_store
         self._bm25_index_path = bm25_index_path
+        self._bm25_store = None
 
-    def run(self, papers_dir: Path) -> IngestResult:
+    def set_bm25_store(self, store: BM25Store) -> None:
+        """Inject BM25Store for ephemeral in-memory ingestion."""
+        self._bm25_store = store
+
+    def run(self, papers_dir: Path, ephemeral: bool = False) -> IngestResult:
         """
         Load all PDFs, chunk, embed, and persist.
         Skips individual PDF failures without halting (FR-07).
@@ -80,9 +86,19 @@ class IngestPipeline:
         # Step 4: Store in ChromaDB (idempotent — skips duplicates)
         chunks_inserted = self._vector_store.add(chunks, embeddings)
 
-        # Step 5: Build and save BM25 index
+        # Step 5: Build BM25 index
         bm25, chunk_ids = self._bm25_indexer.build(chunks)
-        self._bm25_indexer.save(bm25, chunk_ids, chunks, self._bm25_index_path)
+        
+        if ephemeral and self._bm25_store is not None:
+            self._bm25_store.load_from_memory(
+                bm25=bm25,
+                chunk_ids=chunk_ids,
+                chunk_texts=[c.text for c in chunks],
+                chunk_metadata=[{"source": c.source, "page": c.page} for c in chunks],
+            )
+            logger.info("Skipped saving BM25 index to disk (ephemeral mode)")
+        else:
+            self._bm25_indexer.save(bm25, chunk_ids, chunks, self._bm25_index_path)
 
         # Count unique source files that succeeded
         source_files = {page.source for page in pages}

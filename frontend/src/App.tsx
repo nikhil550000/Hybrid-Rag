@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Loader2, AlertCircle, Sparkles, XCircle, Database } from 'lucide-react';
 import { SearchBar } from './components/SearchBar';
 import { ResultCard } from './components/ResultCard';
 import { CitationCard } from './components/CitationCard';
-import type { QueryResponse, ErrorResponse } from './types';
+import { UploadZone } from './components/UploadZone';
+import type { QueryResponse, ErrorResponse, UploadResponse } from './types';
 import './App.css';
 
 const API_URL = 'http://127.0.0.1:8000';
@@ -12,26 +13,32 @@ function App() {
   const [response, setResponse] = useState<QueryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ErrorResponse | null>(null);
+  
+  const [dataSource, setDataSource] = useState<'default' | 'upload'>('default');
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const handleSearch = async (query: string) => {
     setIsLoading(true);
     setError(null);
     setResponse(null);
 
+    const payload = sessionId 
+      ? { query, session_id: sessionId }
+      : { query };
+
     try {
       const res = await fetch(`${API_URL}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        // Handle structured error from FastAPI
         setError({
           error: data.detail?.error || 'SERVER_ERROR',
-          message: data.detail?.message || 'An unexpected error occurred.',
+          message: data.detail?.message || data.detail || 'An unexpected error occurred.',
         });
       } else {
         setResponse(data as QueryResponse);
@@ -46,6 +53,26 @@ function App() {
     }
   };
 
+  const handleSessionCreated = (session: UploadResponse) => {
+    setSessionId(session.session_id);
+    setDataSource('upload'); // Stay on upload view but show banner
+    setResponse(null);
+    setError(null);
+  };
+
+  const clearSession = async () => {
+    if (sessionId) {
+      try {
+        await fetch(`${API_URL}/session/${sessionId}`, { method: 'DELETE' });
+      } catch (err) {
+        console.error("Failed to clear session on backend");
+      }
+      setSessionId(null);
+      setResponse(null);
+      setError(null);
+    }
+  };
+
   return (
     <div className="app-container">
       <header className="header">
@@ -53,7 +80,42 @@ function App() {
         <p className="subtitle">Interactive Q&A over Machine Learning Research</p>
       </header>
 
-      <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+      <div className="source-toggle">
+        <button 
+          className={`toggle-btn ${dataSource === 'default' ? 'active' : ''}`}
+          onClick={() => { setDataSource('default'); setResponse(null); setError(null); }}
+        >
+          Default Corpus (10 Papers)
+        </button>
+        <button 
+          className={`toggle-btn ${dataSource === 'upload' ? 'active' : ''}`}
+          onClick={() => { setDataSource('upload'); setResponse(null); setError(null); }}
+        >
+          Custom Uploads
+        </button>
+      </div>
+
+      {dataSource === 'upload' && !sessionId && (
+        <UploadZone onSessionCreated={handleSessionCreated} />
+      )}
+
+      {(dataSource === 'default' || (dataSource === 'upload' && sessionId)) && (
+        <>
+          {sessionId && (
+            <div className="session-banner">
+              <div className="session-info">
+                <Database size={18} />
+                <span>Custom Session Active — Querying only your uploaded documents</span>
+              </div>
+              <button className="clear-session-btn" onClick={clearSession}>
+                <span className="flex-center gap-2"><XCircle size={14} /> Clear Session</span>
+              </button>
+            </div>
+          )}
+          
+          <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+        </>
+      )}
 
       {isLoading && (
         <div className="loading-container">

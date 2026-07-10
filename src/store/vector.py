@@ -27,17 +27,22 @@ class RetrievedChunk:
 class VectorStore:
     """ChromaDB interface — all reads and writes to the vector store go through here."""
 
-    def __init__(self, collection_name: str, persist_directory: str):
-        self._client = chromadb.PersistentClient(path=persist_directory)
+    def __init__(self, collection_name: str, persist_directory: str = "", ephemeral: bool = False):
+        if ephemeral:
+            self._client = chromadb.EphemeralClient()
+            logger.info(f"VectorStore initialized (EPHEMERAL): collection='{collection_name}'")
+        else:
+            self._client = chromadb.PersistentClient(path=persist_directory)
+            logger.info(
+                f"VectorStore initialized (PERSISTENT): collection='{collection_name}', "
+                f"path='{persist_directory}'"
+            )
+
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
-        logger.info(
-            f"VectorStore initialized: collection='{collection_name}', "
-            f"path='{persist_directory}', "
-            f"existing_count={self._collection.count()}"
-        )
+        logger.info(f"Existing count in collection: {self._collection.count()}")
 
     def add(self, chunks: list[Chunk], embeddings: list[list[float]]) -> int:
         """

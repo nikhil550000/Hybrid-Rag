@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "langchain-text-splitters>=1.1.2",
     "deepeval>=2.0.0",
+    "python-multipart>=0.0.32",
 ]
 
 [project.optional-dependencies]

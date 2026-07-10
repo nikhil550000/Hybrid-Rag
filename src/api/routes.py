@@ -15,10 +15,14 @@ from pathlib import Path
 # Ensure src/ is on the path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI, HTTPException
+import uuid
+import tempfile
+import shutil
+
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.schemas import QueryRequest, QueryResponse, CitationSchema, ErrorResponse, HealthResponse
+from api.schemas import QueryRequest, QueryResponse, CitationSchema, ErrorResponse, HealthResponse, UploadResponse
 from config.settings import load_settings
 from generation.citations import CitationValidator
 from generation.generator import Generator
@@ -28,6 +32,10 @@ from llm.embeddings import SentenceTransformerEmbedder
 from observability.tracer import LangfuseTracer, NullTracer
 from observability.metrics import MetricsCollector
 from pipeline.query import QueryPipeline
+from pipeline.ingest import IngestPipeline
+from ingestion.loader import PDFLoader
+from ingestion.chunker import Chunker
+from ingestion.indexer import BM25Indexer
 from retrieval.dense import DenseRetriever
 from retrieval.reranker import CrossEncoderReranker
 from retrieval.sparse import SparseRetriever
@@ -41,6 +49,7 @@ logger = get_logger(__name__)
 _pipeline: QueryPipeline | None = None
 _metrics: MetricsCollector | None = None
 _chunk_count: int = 0
+_active_sessions: dict[str, QueryPipeline] = {}
 
 
 def _build_tracer(backend: str):
@@ -151,11 +160,17 @@ async def query_endpoint(request: QueryRequest):
     Satisfies: FR-WEB-01 (POST /query), FR-WEB-02 (thin wrapper),
                FR-WEB-03 (structured JSON), FR-WEB-04 (error handling)
     """
-    if _pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    if request.session_id:
+        if request.session_id not in _active_sessions:
+            raise HTTPException(status_code=404, detail="Session not found or expired")
+        pipeline_to_use = _active_sessions[request.session_id]
+    else:
+        if _pipeline is None:
+            raise HTTPException(status_code=503, detail="Default pipeline not initialized")
+        pipeline_to_use = _pipeline
 
     try:
-        result = _pipeline.run(request.query)
+        result = pipeline_to_use.run(request.query)
 
         return QueryResponse(
             answer=result.answer,
@@ -180,6 +195,89 @@ async def query_endpoint(request: QueryRequest):
                 message=str(e),
             ).model_dump(),
         )
+
+
+@app.post("/upload", response_model=UploadResponse)
+async def upload_endpoint(files: list[UploadFile] = File(...)):
+    """Accepts PDFs, runs ephemeral ingestion, returns session_id (Phase 6)."""
+    settings = load_settings()
+    
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 files allowed per session")
+
+    session_id = str(uuid.uuid4())
+    logger.info(f"Starting ephemeral session {session_id} for {len(files)} files")
+
+    # Use a temporary directory to save the uploaded PDFs for ingestion
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        for f in files:
+            if not f.filename.endswith(".pdf"):
+                raise HTTPException(status_code=400, detail=f"Only PDF files are supported ({f.filename})")
+            
+            file_path = temp_dir_path / f.filename
+            with open(file_path, "wb") as out_file:
+                shutil.copyfileobj(f.file, out_file)
+
+        # Build ephemeral components
+        ephemeral_vector_store = VectorStore(
+            collection_name=f"session_{session_id}", 
+            ephemeral=True
+        )
+        ephemeral_bm25_store = BM25Store()
+
+        embedder = SentenceTransformerEmbedder(model_name=settings.embedding_model)
+        
+        ingest_pipeline = IngestPipeline(
+            loader=PDFLoader(),
+            chunker=Chunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
+            embedder=embedder,
+            bm25_indexer=BM25Indexer(),
+            vector_store=ephemeral_vector_store,
+            bm25_index_path=Path("/dev/null") # Won't be written in ephemeral mode
+        )
+        ingest_pipeline.set_bm25_store(ephemeral_bm25_store)
+        
+        ingest_result = ingest_pipeline.run(temp_dir_path, ephemeral=True)
+        
+        if ingest_result.chunks_created == 0:
+            raise HTTPException(status_code=400, detail="Could not extract any text from uploaded PDFs")
+
+        # Build ephemeral QueryPipeline
+        dense_retriever = DenseRetriever(ephemeral_vector_store, embedder, top_k=settings.retrieval_top_k)
+        sparse_retriever = SparseRetriever(ephemeral_bm25_store, top_k=settings.retrieval_top_k)
+        reranker = CrossEncoderReranker(model_name=settings.reranker_model, top_n=settings.reranked_top_n)
+        
+        llm_client = get_llm_client(provider=settings.llm_provider, model=settings.llm_model, temperature=settings.llm_temperature)
+        generator = Generator(llm_client, PromptBuilder(prompt_version=settings.prompt_version), CitationValidator())
+        tracer = _build_tracer(settings.observability_backend)
+
+        session_pipeline = QueryPipeline(
+            dense_retriever=dense_retriever,
+            sparse_retriever=sparse_retriever,
+            reranker=reranker,
+            generator=generator,
+            rrf_k=settings.rrf_k,
+            tracer=tracer,
+            metrics_collector=_metrics,
+        )
+
+        _active_sessions[session_id] = session_pipeline
+        
+        return UploadResponse(
+            session_id=session_id,
+            files_processed=ingest_result.files_processed,
+            chunks_created=ingest_result.chunks_created
+        )
+
+@app.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    """Clears an active session and frees memory."""
+    if session_id in _active_sessions:
+        del _active_sessions[session_id]
+        logger.info(f"Cleared session {session_id}")
+        return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Session not found")
 
 
 @app.get("/metrics")
