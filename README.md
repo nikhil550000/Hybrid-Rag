@@ -25,7 +25,9 @@ Evaluated against a golden dataset of 100 QA pairs (10 per paper) using DeepEval
 | Answer Relevancy | **0.965** |
 | Context Recall | **0.967** |
 | Citation Accuracy | **0.928** |
-| Avg Latency | ~5.1s |
+| P50 Latency | 4,869ms |
+| P90 Latency | 6,596ms |
+| P95 Latency | 6,881ms |
 
 Full report: `evals/report_20260708_015329.json`
 
@@ -175,7 +177,6 @@ Users can upload their own PDFs for isolated Q&A sessions via the web UI:
 
 This is the completed initial architecture. Current focus is on the **optimization phase**:
 
-- Reviewing and understanding every component line-by-line
 - Experimenting with semantic chunking strategies to improve retrieval fidelity
 - Optimizing prompt templates for edge cases found during the 100-question eval
 - Profiling and reducing average query latency
