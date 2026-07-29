@@ -2,6 +2,7 @@
 Query pipeline orchestrator.
 """
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from generation.citations import Citation
@@ -13,6 +14,7 @@ from retrieval.dense import DenseRetriever
 from retrieval.hybrid import reciprocal_rank_fusion
 from retrieval.reranker import CrossEncoderReranker
 from retrieval.sparse import SparseRetriever
+from store.vector import RetrievedChunk
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -62,18 +64,47 @@ class QueryPipeline:
         self._metrics = metrics_collector
         self._query_router = query_router or RuleBasedQueryRouter()
 
+    def _retrieve_hybrid_candidates(
+        self,
+        query: str,
+        timings_ms: dict[str, float],
+    ) -> tuple[list[RetrievedChunk], list[RetrievedChunk]]:
+        """Run independent dense and sparse retrieval stages concurrently."""
+        dense_timings_ms: dict[str, float] = {}
+        sparse_timings_ms: dict[str, float] = {}
+
+        def retrieve_dense() -> list[RetrievedChunk]:
+            return self._dense.retrieve(query, timings_ms=dense_timings_ms)
+
+        def retrieve_sparse() -> list[RetrievedChunk]:
+            stage_start = time.perf_counter()
+            results = self._sparse.retrieve(query)
+            sparse_timings_ms["sparse_retrieval"] = _elapsed_ms(stage_start)
+            return results
+
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag-retrieval") as executor:
+            dense_future = executor.submit(retrieve_dense)
+            sparse_future = executor.submit(retrieve_sparse)
+
+            dense_results = dense_future.result()
+            sparse_results = sparse_future.result()
+
+        timings_ms.update(dense_timings_ms)
+        timings_ms.update(sparse_timings_ms)
+
+        return dense_results, sparse_results
+
     def run(self, query: str) -> QueryResult:
         """
         Full query pipeline:
         1. Start trace
-        2. Dense retrieval (vector similarity)
-        3. Sparse retrieval (BM25 keywords)
-        4. RRF fusion (merge + deduplicate)
-        5. Cross-encoder reranking (precision)
-        6. Log retrieval to tracer
-        7. LLM generation with citation enforcement
-        8. Log generation to tracer
-        9. End trace + record metrics
+        2. Dense + sparse retrieval concurrently
+        3. RRF fusion (merge + deduplicate)
+        4. Cross-encoder reranking (precision)
+        5. Log retrieval to tracer
+        6. LLM generation with citation enforcement
+        7. Log generation to tracer
+        8. End trace + record metrics
 
         Args:
             query: User's natural language question
@@ -133,11 +164,7 @@ class QueryPipeline:
             return result
 
         # Step 2 & 3: Parallel retrieval
-        dense_results = self._dense.retrieve(query, timings_ms=timings_ms)
-
-        stage_start = time.perf_counter()
-        sparse_results = self._sparse.retrieve(query)
-        timings_ms["sparse_retrieval"] = _elapsed_ms(stage_start)
+        dense_results, sparse_results = self._retrieve_hybrid_candidates(query, timings_ms)
 
         # Step 4: RRF fusion
         stage_start = time.perf_counter()
