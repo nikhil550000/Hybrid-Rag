@@ -27,6 +27,7 @@ class QueryResponse(BaseModel):
     latency_ms: float
     cost_usd: float
     timings_ms: dict[str, float] = Field(default_factory=dict)
+    route: str = "RAG_FACTUAL"
 
 
 class ErrorResponse(BaseModel):

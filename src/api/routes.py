@@ -186,6 +186,7 @@ async def query_endpoint(request: QueryRequest):
             latency_ms=result.latency_ms,
             cost_usd=result.cost_usd,
             timings_ms=result.timings_ms,
+            route=result.route,
         )
     except Exception as e:
         logger.error(f"Pipeline error: {e}", exc_info=True)
@@ -294,6 +295,7 @@ async def metrics_endpoint():
         "p95_latency_ms": summary.p95_latency_ms,
         "avg_latency_ms": summary.avg_latency_ms,
         "avg_stage_timings_ms": summary.avg_stage_timings_ms,
+        "requests_by_route": summary.requests_by_route,
         "total_cost_usd": summary.total_cost_usd,
         "avg_cost_usd": summary.avg_cost_usd,
         "citation_coverage_pct": summary.citation_coverage_pct,

@@ -8,6 +8,7 @@ from generation.citations import Citation
 from generation.generator import Generator
 from observability.tracer import TracerProtocol, NullTracer
 from observability.metrics import MetricsCollector
+from pipeline.router import QueryRoute, RuleBasedQueryRouter
 from retrieval.dense import DenseRetriever
 from retrieval.hybrid import reciprocal_rank_fusion
 from retrieval.reranker import CrossEncoderReranker
@@ -35,6 +36,7 @@ class QueryResult:
     latency_ms: float = 0.0
     cost_usd: float = 0.0
     timings_ms: dict[str, float] = field(default_factory=dict)
+    route: str = QueryRoute.RAG_FACTUAL.value
 
 
 class QueryPipeline:
@@ -49,6 +51,7 @@ class QueryPipeline:
         rrf_k: int = 60,
         tracer: TracerProtocol | None = None,
         metrics_collector: MetricsCollector | None = None,
+        query_router: RuleBasedQueryRouter | None = None,
     ):
         self._dense = dense_retriever
         self._sparse = sparse_retriever
@@ -57,6 +60,7 @@ class QueryPipeline:
         self._rrf_k = rrf_k
         self._tracer = tracer or NullTracer()
         self._metrics = metrics_collector
+        self._query_router = query_router or RuleBasedQueryRouter()
 
     def run(self, query: str) -> QueryResult:
         """
@@ -81,6 +85,52 @@ class QueryPipeline:
 
         # Step 1: Start trace
         ctx = self._tracer.start_trace(query)
+
+        # Step 2: Route obvious non-RAG queries away from expensive retrieval.
+        stage_start = time.perf_counter()
+        route_decision = self._query_router.route(query)
+        timings_ms["query_routing"] = _elapsed_ms(stage_start)
+
+        if not route_decision.should_run_rag:
+            timings_ms["total_latency"] = _elapsed_ms(start)
+            rounded_timings_ms = _rounded_timings(timings_ms)
+
+            self._tracer.end_trace(
+                ctx,
+                refused=route_decision.refused,
+                timings_ms=rounded_timings_ms,
+                metadata={
+                    "query_route": route_decision.route.value,
+                    "route_reason": route_decision.reason,
+                    "short_circuited": True,
+                },
+            )
+
+            result = QueryResult(
+                query=query,
+                answer=route_decision.answer,
+                refused=route_decision.refused,
+                latency_ms=rounded_timings_ms["total_latency"],
+                cost_usd=0.0,
+                timings_ms=rounded_timings_ms,
+                route=route_decision.route.value,
+            )
+
+            if self._metrics:
+                self._metrics.record_request(
+                    latency_ms=result.latency_ms,
+                    cost_usd=result.cost_usd,
+                    has_citations=False,
+                    failed=result.refused,
+                    timings_ms=result.timings_ms,
+                    route=result.route,
+                )
+
+            logger.info(
+                f"Query routed without RAG | route={result.route} | "
+                f"reason={route_decision.reason} | latency={result.latency_ms}ms"
+            )
+            return result
 
         # Step 2 & 3: Parallel retrieval
         dense_results = self._dense.retrieve(query, timings_ms=timings_ms)
@@ -131,6 +181,11 @@ class QueryPipeline:
             ctx,
             refused=gen_response.refused,
             timings_ms=rounded_timings_ms,
+            metadata={
+                "query_route": route_decision.route.value,
+                "route_reason": route_decision.reason,
+                "short_circuited": False,
+            },
         )
 
         result = QueryResult(
@@ -141,6 +196,7 @@ class QueryPipeline:
             latency_ms=elapsed_ms,
             cost_usd=gen_response.cost_usd,
             timings_ms=rounded_timings_ms,
+            route=route_decision.route.value,
         )
 
         # Record metrics
@@ -151,11 +207,13 @@ class QueryPipeline:
                 has_citations=len(result.citations) > 0,
                 failed=result.refused,
                 timings_ms=result.timings_ms,
+                route=result.route,
             )
 
         logger.info(
             f"Query completed in {result.latency_ms}ms | "
-            f"citations={len(result.citations)} | refused={result.refused} | "
+            f"route={result.route} | citations={len(result.citations)} | "
+            f"refused={result.refused} | "
             f"timings_ms={result.timings_ms}"
         )
         return result

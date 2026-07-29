@@ -71,6 +71,7 @@ class TracerProtocol(Protocol):
         ctx: TraceContext,
         refused: bool,
         timings_ms: dict[str, float] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Close the root trace and flush to backend."""
         ...
@@ -239,19 +240,22 @@ class LangfuseTracer:
         ctx: TraceContext,
         refused: bool,
         timings_ms: dict[str, float] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Close the root span and flush pending events to Langfuse."""
         if ctx._root_span is None:
             return
 
         try:
+            trace_metadata = {
+                "trace_id": ctx.trace_id,
+                "status": "refused" if refused else "answered",
+                "timings_ms": timings_ms or {},
+            }
+            trace_metadata.update(metadata or {})
             ctx._root_span.update(
                 output={"refused": refused},
-                metadata={
-                    "trace_id": ctx.trace_id,
-                    "status": "refused" if refused else "answered",
-                    "timings_ms": timings_ms or {},
-                },
+                metadata=trace_metadata,
             )
             ctx._root_span.end()
         except Exception as e:
@@ -293,5 +297,6 @@ class NullTracer:
         ctx: TraceContext,
         refused: bool,
         timings_ms: dict[str, float] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         pass

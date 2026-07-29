@@ -20,6 +20,7 @@ class MetricsSummary:
     p95_latency_ms: float
     avg_latency_ms: float
     avg_stage_timings_ms: dict[str, float]
+    requests_by_route: dict[str, int]
     total_cost_usd: float
     avg_cost_usd: float
     citation_coverage_pct: float  # % of responses with ≥1 citation
@@ -39,6 +40,7 @@ class MetricsCollector:
         self._has_citations: list[bool] = []
         self._failed: list[bool] = []
         self._stage_timings: list[dict[str, float]] = []
+        self._routes: list[str] = []
 
     def record_request(
         self,
@@ -47,6 +49,7 @@ class MetricsCollector:
         has_citations: bool,
         failed: bool,
         timings_ms: dict[str, float] | None = None,
+        route: str = "",
     ) -> None:
         """Record metrics for a single completed request."""
         self._latencies.append(latency_ms)
@@ -55,6 +58,8 @@ class MetricsCollector:
         self._failed.append(failed)
         if timings_ms:
             self._stage_timings.append(dict(timings_ms))
+        if route:
+            self._routes.append(route)
 
         logger.debug(
             f"Metrics recorded: latency={latency_ms:.1f}ms, "
@@ -75,6 +80,7 @@ class MetricsCollector:
                 p95_latency_ms=0.0,
                 avg_latency_ms=0.0,
                 avg_stage_timings_ms={},
+                requests_by_route={},
                 total_cost_usd=0.0,
                 avg_cost_usd=0.0,
                 citation_coverage_pct=0.0,
@@ -93,6 +99,10 @@ class MetricsCollector:
         total_cost = sum(self._costs)
         cited_count = sum(1 for c in self._has_citations if c)
         failed_count = sum(1 for f in self._failed if f)
+        requests_by_route = {
+            route: self._routes.count(route)
+            for route in sorted(set(self._routes))
+        }
         stage_keys = sorted({key for sample in self._stage_timings for key in sample})
         avg_stage_timings = {
             key: round(
@@ -110,6 +120,7 @@ class MetricsCollector:
             p95_latency_ms=round(p95, 1),
             avg_latency_ms=round(statistics.mean(self._latencies), 1),
             avg_stage_timings_ms=avg_stage_timings,
+            requests_by_route=requests_by_route,
             total_cost_usd=round(total_cost, 6),
             avg_cost_usd=round(total_cost / n, 6),
             citation_coverage_pct=round((cited_count / n) * 100, 1),
@@ -123,3 +134,4 @@ class MetricsCollector:
         self._has_citations.clear()
         self._failed.clear()
         self._stage_timings.clear()
+        self._routes.clear()
