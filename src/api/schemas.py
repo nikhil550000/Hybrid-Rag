@@ -26,6 +26,7 @@ class QueryResponse(BaseModel):
     refused: bool
     latency_ms: float
     cost_usd: float
+    timings_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class ErrorResponse(BaseModel):

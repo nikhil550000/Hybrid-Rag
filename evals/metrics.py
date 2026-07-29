@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 
-from deepeval.models import AnthropicModel
+from deepeval.models import AnthropicModel, GeminiModel
 from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric, ContextualRecallMetric
 from deepeval.test_case import LLMTestCase
 
@@ -67,17 +67,27 @@ class EvalReport:
 
 # ─── DeepEval LLM-as-judge evaluation ────────────────────────────────────────
 
-def _build_judge_model(provider: str, model: str) -> AnthropicModel:
-    """Build the DeepEval judge model from settings."""
+def _build_judge_model(provider: str, model: str):
+    """Build the DeepEval judge model from settings.
+
+    Supports:
+        - anthropic: uses DeepEval's AnthropicModel
+        - google: uses DeepEval's GeminiModel
+    """
     if provider == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set — required for evaluation")
         return AnthropicModel(model=model, api_key=api_key)
+    elif provider == "google":
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not set — required for evaluation")
+        return GeminiModel(model=model, api_key=api_key)
     else:
         raise ValueError(
             f"Unsupported eval provider: {provider}. "
-            f"DeepEval supports: anthropic (native), openai, etc."
+            f"DeepEval supports: anthropic, google"
         )
 
 

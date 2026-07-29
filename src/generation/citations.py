@@ -1,7 +1,5 @@
-"""Citation extraction and validation.
-
-Implements: HLD 3.11 (two-layer citation enforcement)
-Satisfies: FR-17, FR-18
+"""
+Citation extraction and validation.
 """
 import re
 from dataclasses import dataclass

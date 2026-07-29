@@ -1,7 +1,5 @@
-"""Sparse keyword retrieval via BM25.
-
-Implements: HLD 3.6
-Satisfies: FR-10
+"""
+Sparse keyword retrieval via BM25.
 """
 from store.bm25 import BM25Store
 from store.vector import RetrievedChunk

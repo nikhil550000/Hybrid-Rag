@@ -1,6 +1,6 @@
 llm:
-  provider: anthropic          # anthropic | google
-  model: claude-haiku-4-5      # swap without code change
+  provider: google             # anthropic | google
+  model: gemini-3.5-flash-lite # swap without code change
   temperature: 0.0             # low temp = factual, deterministic
 
 embeddings:
@@ -30,6 +30,8 @@ store:
 eval:
   dataset_path: evals/dataset.json
   faithfulness_threshold: 0.75  # gate rises after first baseline run
+  judge_provider: anthropic      # LLM-as-judge provider (keep strong model)
+  judge_model: claude-haiku-4-5  # eval judge model — independent of RAG LLM
 
 observability:
   backend: langfuse            # langfuse | langsmith | none

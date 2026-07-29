@@ -27,6 +27,7 @@ MODEL_PRICING = {
     "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
     "gemini-2.5-flash-preview-05-20": {"input": 0.15, "output": 0.60},
     "gemini-2.5-pro-preview-05-06": {"input": 1.25, "output": 10.00},
+    "gemini-3.5-flash-lite": {"input": 0.10, "output": 0.40},
 }
 
 
@@ -90,16 +91,15 @@ class GoogleClient:
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
         """Call Google Gemini API with retry (3 attempts, exponential backoff)."""
-        full_prompt = f"{system_prompt}\n\n{user_prompt}"
-
         for attempt in range(MAX_RETRIES):
             try:
                 response = self._client.models.generate_content(
                     model=self._model_name,
-                    contents=full_prompt,
+                    contents=user_prompt,
                     config=genai.types.GenerateContentConfig(
                         temperature=self._temperature,
                         max_output_tokens=2048,
+                        system_instruction=system_prompt,
                     ),
                 )
                 # Extract token counts from usage metadata

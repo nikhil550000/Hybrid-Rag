@@ -41,6 +41,8 @@ class Settings:
     # Eval
     eval_dataset_path: str
     faithfulness_threshold: float
+    eval_judge_provider: str
+    eval_judge_model: str
     # Observability
     observability_backend: str
     log_level: str
@@ -80,6 +82,8 @@ def load_settings(config_path: Path = Path("config/settings.yaml")) -> Settings:
         collection_name=raw["store"]["collection_name"],
         eval_dataset_path=raw["eval"]["dataset_path"],
         faithfulness_threshold=raw["eval"]["faithfulness_threshold"],
+        eval_judge_provider=raw["eval"].get("judge_provider", raw["llm"]["provider"]),
+        eval_judge_model=raw["eval"].get("judge_model", raw["llm"]["model"]),
         observability_backend=raw["observability"]["backend"],
         log_level=raw["observability"]["log_level"],
     )

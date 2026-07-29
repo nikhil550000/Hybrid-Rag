@@ -14,8 +14,8 @@ Design:
     https://langfuse.com/docs/observability/sdk/instrumentation
 """
 import uuid
-from dataclasses import dataclass, field
-from typing import Protocol, Any, Optional
+from dataclasses import dataclass
+from typing import Protocol, Any
 
 from utils.logger import get_logger
 
@@ -47,6 +47,7 @@ class TracerProtocol(Protocol):
         ctx: TraceContext,
         pre_rerank: list,
         post_rerank: list,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         """Log retrieval results (pre- and post-rerank candidate lists)."""
         ...
@@ -60,11 +61,17 @@ class TracerProtocol(Protocol):
         tokens_out: int,
         latency_ms: float,
         cost_usd: float,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         """Log the LLM generation step with full metadata."""
         ...
 
-    def end_trace(self, ctx: TraceContext, refused: bool) -> None:
+    def end_trace(
+        self,
+        ctx: TraceContext,
+        refused: bool,
+        timings_ms: dict[str, float] | None = None,
+    ) -> None:
         """Close the root trace and flush to backend."""
         ...
 
@@ -128,6 +135,7 @@ class LangfuseTracer:
         ctx: TraceContext,
         pre_rerank: list,
         post_rerank: list,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         """Log retrieval candidates as a child span of the root span."""
         if ctx._root_span is None:
@@ -140,6 +148,22 @@ class LangfuseTracer:
                 "pre_rerank_ids": [c.chunk_id for c in pre_rerank[:10]],
                 "post_rerank_ids": [c.chunk_id for c in post_rerank],
             }
+            retrieval_timing_keys = {
+                "query_embedding",
+                "dense_retrieval",
+                "sparse_retrieval",
+                "rrf",
+                "reranking",
+            }
+            retrieval_timings = {
+                key: value
+                for key, value in (timings_ms or {}).items()
+                if key in retrieval_timing_keys
+            }
+            metadata = dict(retrieval_output)
+            if retrieval_timings:
+                metadata["timings_ms"] = retrieval_timings
+
             # Create child span on the root span object for proper nesting
             retrieval_span = ctx._root_span.start_observation(
                 name="retrieval",
@@ -148,7 +172,7 @@ class LangfuseTracer:
             retrieval_span.update(
                 input={"query": ctx.query},
                 output=retrieval_output,
-                metadata=retrieval_output,
+                metadata=metadata,
             )
             retrieval_span.end()
         except Exception as e:
@@ -163,6 +187,7 @@ class LangfuseTracer:
         tokens_out: int,
         latency_ms: float,
         cost_usd: float,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         """Log the LLM generation as a generation observation (child of root)."""
         if ctx._root_span is None:
@@ -174,6 +199,23 @@ class LangfuseTracer:
                 name="llm-generation",
                 as_type="generation",
             )
+            generation_timing_keys = {
+                "prompt_building",
+                "llm_call",
+                "citation_validation",
+                "total_latency",
+            }
+            generation_timings = {
+                key: value
+                for key, value in (timings_ms or {}).items()
+                if key in generation_timing_keys
+            }
+            metadata = {
+                "latency_ms": latency_ms,
+            }
+            if generation_timings:
+                metadata["timings_ms"] = generation_timings
+
             gen.update(
                 input=prompt[:500],
                 output=response[:500],
@@ -185,16 +227,19 @@ class LangfuseTracer:
                 cost_details={
                     "total": cost_usd,
                 },
-                metadata={
-                    "latency_ms": latency_ms,
-                },
+                metadata=metadata,
             )
             gen.end()
             ctx._generation = gen
         except Exception as e:
             logger.warning(f"Failed to log generation span: {e}")
 
-    def end_trace(self, ctx: TraceContext, refused: bool) -> None:
+    def end_trace(
+        self,
+        ctx: TraceContext,
+        refused: bool,
+        timings_ms: dict[str, float] | None = None,
+    ) -> None:
         """Close the root span and flush pending events to Langfuse."""
         if ctx._root_span is None:
             return
@@ -202,7 +247,11 @@ class LangfuseTracer:
         try:
             ctx._root_span.update(
                 output={"refused": refused},
-                metadata={"status": "refused" if refused else "answered"},
+                metadata={
+                    "trace_id": ctx.trace_id,
+                    "status": "refused" if refused else "answered",
+                    "timings_ms": timings_ms or {},
+                },
             )
             ctx._root_span.end()
         except Exception as e:
@@ -223,14 +272,26 @@ class NullTracer:
     def start_trace(self, query: str) -> TraceContext:
         return TraceContext(trace_id="null", query=query)
 
-    def log_retrieval(self, ctx: TraceContext, pre_rerank: list, post_rerank: list) -> None:
+    def log_retrieval(
+        self,
+        ctx: TraceContext,
+        pre_rerank: list,
+        post_rerank: list,
+        timings_ms: dict[str, float] | None = None,
+    ) -> None:
         pass
 
     def log_generation(
         self, ctx: TraceContext, prompt: str, response: str,
         tokens_in: int, tokens_out: int, latency_ms: float, cost_usd: float,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         pass
 
-    def end_trace(self, ctx: TraceContext, refused: bool) -> None:
+    def end_trace(
+        self,
+        ctx: TraceContext,
+        refused: bool,
+        timings_ms: dict[str, float] | None = None,
+    ) -> None:
         pass

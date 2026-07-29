@@ -1,7 +1,5 @@
-"""Embedding client protocol and implementations.
-
-Implements: HLD 3.3, 3.5 (embedding)
-Satisfies: FR-04, FR-09
+"""
+Embedding client protocol and implementations.
 """
 from typing import Protocol
 

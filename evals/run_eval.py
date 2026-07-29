@@ -102,8 +102,8 @@ def main():
     logger.info("Running DeepEval LLM-as-judge evaluation...")
     judge_scores = run_deepeval_evaluation(
         samples=samples,
-        provider=settings.llm_provider,
-        model=settings.llm_model,
+        provider=settings.eval_judge_provider,
+        model=settings.eval_judge_model,
     )
 
     # Aggregate stats

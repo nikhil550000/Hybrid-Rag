@@ -1,8 +1,7 @@
-"""LLM generation with citation enforcement.
-
-Implements: HLD 3.10, 3.11
-Satisfies: FR-15, FR-17, FR-18, FR-19
 """
+LLM generation with citation enforcement.
+"""
+import time
 from dataclasses import dataclass, field
 
 from generation.citations import Citation, CitationValidator
@@ -14,6 +13,15 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 REFUSAL_PREFIX = "INSUFFICIENT_CONTEXT"
+
+
+def _record_timing(
+    timings_ms: dict[str, float] | None,
+    key: str,
+    start: float,
+) -> None:
+    if timings_ms is not None:
+        timings_ms[key] = (time.perf_counter() - start) * 1000
 
 
 @dataclass
@@ -43,7 +51,10 @@ class Generator:
         self._citation_validator = citation_validator
 
     def generate(
-        self, query: str, chunks: list[RetrievedChunk]
+        self,
+        query: str,
+        chunks: list[RetrievedChunk],
+        timings_ms: dict[str, float] | None = None,
     ) -> GeneratorResponse:
         """
         Generate a cited answer from the LLM.
@@ -63,10 +74,14 @@ class Generator:
             GeneratorResponse with answer, valid citations, and refusal status
         """
         # Step 1: Build prompts
+        stage_start = time.perf_counter()
         system_prompt, user_prompt = self._prompt_builder.build(query, chunks)
+        _record_timing(timings_ms, "prompt_building", stage_start)
 
         # Step 2: Call LLM
+        stage_start = time.perf_counter()
         llm_response = self._llm.complete(system_prompt, user_prompt)
+        _record_timing(timings_ms, "llm_call", stage_start)
         raw_answer = llm_response.text
 
         logger.info(
@@ -76,6 +91,8 @@ class Generator:
 
         # Step 3: Check for refusal
         if raw_answer.strip().startswith(REFUSAL_PREFIX):
+            if timings_ms is not None:
+                timings_ms["citation_validation"] = 0.0
             return GeneratorResponse(
                 answer=raw_answer,
                 refused=True,
@@ -87,9 +104,11 @@ class Generator:
             )
 
         # Step 4: Validate citations
+        stage_start = time.perf_counter()
         valid_citations, invalid_ids = self._citation_validator.validate(
             raw_answer, chunks
         )
+        _record_timing(timings_ms, "citation_validation", stage_start)
 
         # Step 5: Strip invalid citations from the answer
         clean_answer = raw_answer

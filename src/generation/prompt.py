@@ -1,7 +1,5 @@
-"""Prompt builder — loads versioned prompt templates.
-
-Implements: HLD 3.10
-Satisfies: FR-15, FR-16
+"""
+Prompt builder — loads versioned prompt templates.
 """
 from pathlib import Path
 

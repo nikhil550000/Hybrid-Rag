@@ -1,10 +1,7 @@
-"""Cross-encoder re-ranking of candidate chunks.
-
-Implements: HLD 3.8
-Satisfies: FR-12
+"""
+Cross-encoder re-ranking of candidate chunks.
 """
 from sentence_transformers import CrossEncoder
-
 from store.vector import RetrievedChunk
 from utils.logger import get_logger
 

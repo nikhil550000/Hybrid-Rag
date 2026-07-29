@@ -1,7 +1,5 @@
-"""Reciprocal Rank Fusion for hybrid retrieval.
-
-Implements: HLD 3.7
-Satisfies: FR-11
+"""
+Reciprocal Rank Fusion for hybrid retrieval.
 """
 from store.vector import RetrievedChunk
 from utils.logger import get_logger

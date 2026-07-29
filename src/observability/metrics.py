@@ -5,7 +5,7 @@ Satisfies: FR-29 (P50/P95 latency), FR-30 (cost-per-request),
            FR-31 (citation coverage), FR-32 (failure rate)
 """
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from utils.logger import get_logger
 
@@ -19,6 +19,7 @@ class MetricsSummary:
     p50_latency_ms: float
     p95_latency_ms: float
     avg_latency_ms: float
+    avg_stage_timings_ms: dict[str, float]
     total_cost_usd: float
     avg_cost_usd: float
     citation_coverage_pct: float  # % of responses with ≥1 citation
@@ -37,6 +38,7 @@ class MetricsCollector:
         self._costs: list[float] = []
         self._has_citations: list[bool] = []
         self._failed: list[bool] = []
+        self._stage_timings: list[dict[str, float]] = []
 
     def record_request(
         self,
@@ -44,12 +46,15 @@ class MetricsCollector:
         cost_usd: float,
         has_citations: bool,
         failed: bool,
+        timings_ms: dict[str, float] | None = None,
     ) -> None:
         """Record metrics for a single completed request."""
         self._latencies.append(latency_ms)
         self._costs.append(cost_usd)
         self._has_citations.append(has_citations)
         self._failed.append(failed)
+        if timings_ms:
+            self._stage_timings.append(dict(timings_ms))
 
         logger.debug(
             f"Metrics recorded: latency={latency_ms:.1f}ms, "
@@ -69,6 +74,7 @@ class MetricsCollector:
                 p50_latency_ms=0.0,
                 p95_latency_ms=0.0,
                 avg_latency_ms=0.0,
+                avg_stage_timings_ms={},
                 total_cost_usd=0.0,
                 avg_cost_usd=0.0,
                 citation_coverage_pct=0.0,
@@ -87,12 +93,23 @@ class MetricsCollector:
         total_cost = sum(self._costs)
         cited_count = sum(1 for c in self._has_citations if c)
         failed_count = sum(1 for f in self._failed if f)
+        stage_keys = sorted({key for sample in self._stage_timings for key in sample})
+        avg_stage_timings = {
+            key: round(
+                statistics.mean(
+                    sample[key] for sample in self._stage_timings if key in sample
+                ),
+                1,
+            )
+            for key in stage_keys
+        }
 
         return MetricsSummary(
             total_requests=n,
             p50_latency_ms=round(p50, 1),
             p95_latency_ms=round(p95, 1),
             avg_latency_ms=round(statistics.mean(self._latencies), 1),
+            avg_stage_timings_ms=avg_stage_timings,
             total_cost_usd=round(total_cost, 6),
             avg_cost_usd=round(total_cost / n, 6),
             citation_coverage_pct=round((cited_count / n) * 100, 1),
@@ -105,3 +122,4 @@ class MetricsCollector:
         self._costs.clear()
         self._has_citations.clear()
         self._failed.clear()
+        self._stage_timings.clear()
