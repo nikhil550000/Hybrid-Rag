@@ -29,7 +29,7 @@ from generation.generator import Generator
 from generation.prompt import PromptBuilder
 from llm.client import get_llm_client
 from llm.embeddings import SentenceTransformerEmbedder
-from observability.tracer import LangfuseTracer, NullTracer
+from observability.tracer import LangfuseTracer, NullTracer, TracerProtocol
 from observability.metrics import MetricsCollector
 from pipeline.query import QueryPipeline
 from pipeline.ingest import IngestPipeline
@@ -50,6 +50,10 @@ _pipeline: QueryPipeline | None = None
 _metrics: MetricsCollector | None = None
 _chunk_count: int = 0
 _active_sessions: dict[str, QueryPipeline] = {}
+_shared_embedder: SentenceTransformerEmbedder | None = None
+_shared_reranker: CrossEncoderReranker | None = None
+_shared_generator: Generator | None = None
+_shared_tracer: TracerProtocol | None = None
 
 
 def _build_tracer(backend: str):
@@ -69,17 +73,18 @@ def _build_tracer(backend: str):
 async def lifespan(app: FastAPI):
     """Initialize pipeline once at startup, tear down on shutdown."""
     global _pipeline, _metrics, _chunk_count
+    global _shared_embedder, _shared_reranker, _shared_generator, _shared_tracer
 
     settings = load_settings()
     setup_logging(log_level=settings.log_level)
     logger.info("Starting RAG Scholar API server...")
 
     # Observability
-    tracer = _build_tracer(settings.observability_backend)
+    _shared_tracer = _build_tracer(settings.observability_backend)
     _metrics = MetricsCollector()
 
     # Retrieval components
-    embedder = SentenceTransformerEmbedder(model_name=settings.embedding_model)
+    _shared_embedder = SentenceTransformerEmbedder(model_name=settings.embedding_model)
     vector_store = VectorStore(
         collection_name=settings.collection_name,
         persist_directory=settings.vector_store_path,
@@ -89,9 +94,9 @@ async def lifespan(app: FastAPI):
     bm25_store = BM25Store()
     bm25_store.load(Path(settings.bm25_index_path))
 
-    dense_retriever = DenseRetriever(vector_store, embedder, top_k=settings.retrieval_top_k)
+    dense_retriever = DenseRetriever(vector_store, _shared_embedder, top_k=settings.retrieval_top_k)
     sparse_retriever = SparseRetriever(bm25_store, top_k=settings.retrieval_top_k)
-    reranker = CrossEncoderReranker(
+    _shared_reranker = CrossEncoderReranker(
         model_name=settings.reranker_model,
         top_n=settings.reranked_top_n,
     )
@@ -104,16 +109,16 @@ async def lifespan(app: FastAPI):
     )
     prompt_builder = PromptBuilder(prompt_version=settings.prompt_version)
     citation_validator = CitationValidator()
-    generator = Generator(llm_client, prompt_builder, citation_validator)
+    _shared_generator = Generator(llm_client, prompt_builder, citation_validator)
 
     # Wire pipeline
     _pipeline = QueryPipeline(
         dense_retriever=dense_retriever,
         sparse_retriever=sparse_retriever,
-        reranker=reranker,
-        generator=generator,
+        reranker=_shared_reranker,
+        generator=_shared_generator,
         rrf_k=settings.rrf_k,
-        tracer=tracer,
+        tracer=_shared_tracer,
         metrics_collector=_metrics,
     )
 
@@ -203,6 +208,14 @@ async def query_endpoint(request: QueryRequest):
 async def upload_endpoint(files: list[UploadFile] = File(...)):
     """Accepts PDFs, runs ephemeral ingestion, returns session_id (Phase 6)."""
     settings = load_settings()
+
+    if (
+        _shared_embedder is None
+        or _shared_reranker is None
+        or _shared_generator is None
+        or _shared_tracer is None
+    ):
+        raise HTTPException(status_code=503, detail="Shared pipeline components not initialized")
     
     if len(files) > 5:
         raise HTTPException(status_code=400, detail="Maximum 5 files allowed per session")
@@ -227,13 +240,11 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
             ephemeral=True
         )
         ephemeral_bm25_store = BM25Store()
-
-        embedder = SentenceTransformerEmbedder(model_name=settings.embedding_model)
         
         ingest_pipeline = IngestPipeline(
             loader=PDFLoader(),
             chunker=Chunker(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap),
-            embedder=embedder,
+            embedder=_shared_embedder,
             bm25_indexer=BM25Indexer(),
             vector_store=ephemeral_vector_store,
             bm25_index_path=Path("/dev/null") # Won't be written in ephemeral mode
@@ -246,21 +257,16 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
             raise HTTPException(status_code=400, detail="Could not extract any text from uploaded PDFs")
 
         # Build ephemeral QueryPipeline
-        dense_retriever = DenseRetriever(ephemeral_vector_store, embedder, top_k=settings.retrieval_top_k)
+        dense_retriever = DenseRetriever(ephemeral_vector_store, _shared_embedder, top_k=settings.retrieval_top_k)
         sparse_retriever = SparseRetriever(ephemeral_bm25_store, top_k=settings.retrieval_top_k)
-        reranker = CrossEncoderReranker(model_name=settings.reranker_model, top_n=settings.reranked_top_n)
-        
-        llm_client = get_llm_client(provider=settings.llm_provider, model=settings.llm_model, temperature=settings.llm_temperature)
-        generator = Generator(llm_client, PromptBuilder(prompt_version=settings.prompt_version), CitationValidator())
-        tracer = _build_tracer(settings.observability_backend)
 
         session_pipeline = QueryPipeline(
             dense_retriever=dense_retriever,
             sparse_retriever=sparse_retriever,
-            reranker=reranker,
-            generator=generator,
+            reranker=_shared_reranker,
+            generator=_shared_generator,
             rrf_k=settings.rrf_k,
-            tracer=tracer,
+            tracer=_shared_tracer,
             metrics_collector=_metrics,
         )
 
