@@ -10,6 +10,7 @@ request. CLI and API exercise identical code paths.
 import os
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 # Ensure src/ is on the path
@@ -33,6 +34,8 @@ from observability.tracer import LangfuseTracer, NullTracer, TracerProtocol
 from observability.metrics import MetricsCollector
 from pipeline.query import QueryPipeline
 from pipeline.ingest import IngestPipeline
+from pipeline.memory import InMemoryConversationStore
+from pipeline.rewriter import LLMQueryRewriter, QueryRewriter
 from ingestion.loader import PDFLoader
 from ingestion.chunker import Chunker
 from ingestion.indexer import BM25Indexer
@@ -45,15 +48,25 @@ from utils.logger import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
+
+@dataclass
+class DocumentSession:
+    """Process-local state for an uploaded-document query session."""
+
+    pipeline: QueryPipeline
+
+
 # Module-level references set during lifespan
 _pipeline: QueryPipeline | None = None
 _metrics: MetricsCollector | None = None
 _chunk_count: int = 0
-_active_sessions: dict[str, QueryPipeline] = {}
+_active_document_sessions: dict[str, DocumentSession] = {}
 _shared_embedder: SentenceTransformerEmbedder | None = None
 _shared_reranker: CrossEncoderReranker | None = None
 _shared_generator: Generator | None = None
 _shared_tracer: TracerProtocol | None = None
+_shared_conversation_store: InMemoryConversationStore | None = None
+_shared_query_rewriter: QueryRewriter | None = None
 
 
 def _build_tracer(backend: str):
@@ -74,6 +87,7 @@ async def lifespan(app: FastAPI):
     """Initialize pipeline once at startup, tear down on shutdown."""
     global _pipeline, _metrics, _chunk_count
     global _shared_embedder, _shared_reranker, _shared_generator, _shared_tracer
+    global _shared_conversation_store, _shared_query_rewriter
 
     settings = load_settings()
     setup_logging(log_level=settings.log_level)
@@ -110,6 +124,8 @@ async def lifespan(app: FastAPI):
     prompt_builder = PromptBuilder(prompt_version=settings.prompt_version)
     citation_validator = CitationValidator()
     _shared_generator = Generator(llm_client, prompt_builder, citation_validator)
+    _shared_conversation_store = InMemoryConversationStore()
+    _shared_query_rewriter = LLMQueryRewriter(llm_client)
 
     # Wire pipeline
     _pipeline = QueryPipeline(
@@ -120,6 +136,8 @@ async def lifespan(app: FastAPI):
         rrf_k=settings.rrf_k,
         tracer=_shared_tracer,
         metrics_collector=_metrics,
+        conversation_store=_shared_conversation_store,
+        query_rewriter=_shared_query_rewriter,
     )
 
     logger.info(f"Pipeline ready — {_chunk_count} chunks indexed")
@@ -162,20 +180,31 @@ async def health():
 async def query_endpoint(request: QueryRequest):
     """Execute a RAG query — thin wrapper around Pipeline.run().
 
+    The optional request.session_id selects an uploaded-document session only.
+    Conversation memory is intentionally modeled separately from this value.
+
     Satisfies: FR-WEB-01 (POST /query), FR-WEB-02 (thin wrapper),
                FR-WEB-03 (structured JSON), FR-WEB-04 (error handling)
     """
     if request.session_id:
-        if request.session_id not in _active_sessions:
+        document_session = _active_document_sessions.get(request.session_id)
+        if document_session is None:
             raise HTTPException(status_code=404, detail="Session not found or expired")
-        pipeline_to_use = _active_sessions[request.session_id]
+        pipeline_to_use = document_session.pipeline
     else:
         if _pipeline is None:
             raise HTTPException(status_code=503, detail="Default pipeline not initialized")
         pipeline_to_use = _pipeline
 
+    conversation_id = request.conversation_id or str(uuid.uuid4())
+    conversation_scope = request.session_id or "default"
+    scoped_conversation_id = f"{conversation_scope}:{conversation_id}"
+
     try:
-        result = pipeline_to_use.run(request.query)
+        result = pipeline_to_use.run(
+            request.query,
+            conversation_id=scoped_conversation_id,
+        )
 
         return QueryResponse(
             answer=result.answer,
@@ -192,6 +221,9 @@ async def query_endpoint(request: QueryRequest):
             cost_usd=result.cost_usd,
             timings_ms=result.timings_ms,
             route=result.route,
+            conversation_id=conversation_id,
+            retrieval_query=result.retrieval_query,
+            query_rewritten=result.query_rewritten,
         )
     except Exception as e:
         logger.error(f"Pipeline error: {e}", exc_info=True)
@@ -206,7 +238,7 @@ async def query_endpoint(request: QueryRequest):
 
 @app.post("/upload", response_model=UploadResponse)
 async def upload_endpoint(files: list[UploadFile] = File(...)):
-    """Accepts PDFs, runs ephemeral ingestion, returns session_id (Phase 6)."""
+    """Accept PDFs and return an uploaded-document session_id."""
     settings = load_settings()
 
     if (
@@ -214,6 +246,8 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
         or _shared_reranker is None
         or _shared_generator is None
         or _shared_tracer is None
+        or _shared_conversation_store is None
+        or _shared_query_rewriter is None
     ):
         raise HTTPException(status_code=503, detail="Shared pipeline components not initialized")
     
@@ -268,9 +302,13 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
             rrf_k=settings.rrf_k,
             tracer=_shared_tracer,
             metrics_collector=_metrics,
+            conversation_store=_shared_conversation_store,
+            query_rewriter=_shared_query_rewriter,
         )
 
-        _active_sessions[session_id] = session_pipeline
+        _active_document_sessions[session_id] = DocumentSession(
+            pipeline=session_pipeline,
+        )
         
         return UploadResponse(
             session_id=session_id,
@@ -280,10 +318,10 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
 
 @app.delete("/session/{session_id}")
 async def delete_session(session_id: str):
-    """Clears an active session and frees memory."""
-    if session_id in _active_sessions:
-        del _active_sessions[session_id]
-        logger.info(f"Cleared session {session_id}")
+    """Clear an uploaded-document session and free its process-local memory."""
+    if session_id in _active_document_sessions:
+        del _active_document_sessions[session_id]
+        logger.info(f"Cleared uploaded-document session {session_id}")
         return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Session not found")
 
