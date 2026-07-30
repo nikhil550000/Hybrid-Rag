@@ -9,6 +9,8 @@ from generation.citations import Citation
 from generation.generator import Generator
 from observability.tracer import TracerProtocol, NullTracer
 from observability.metrics import MetricsCollector
+from pipeline.memory import ConversationTurn, InMemoryConversationStore
+from pipeline.rewriter import NoOpQueryRewriter, QueryRewriter, RewriteResult
 from pipeline.router import QueryRoute, RuleBasedQueryRouter
 from retrieval.dense import DenseRetriever
 from retrieval.hybrid import reciprocal_rank_fusion
@@ -39,6 +41,8 @@ class QueryResult:
     cost_usd: float = 0.0
     timings_ms: dict[str, float] = field(default_factory=dict)
     route: str = QueryRoute.RAG_FACTUAL.value
+    retrieval_query: str = ""
+    query_rewritten: bool = False
 
 
 class QueryPipeline:
@@ -54,6 +58,8 @@ class QueryPipeline:
         tracer: TracerProtocol | None = None,
         metrics_collector: MetricsCollector | None = None,
         query_router: RuleBasedQueryRouter | None = None,
+        conversation_store: InMemoryConversationStore | None = None,
+        query_rewriter: QueryRewriter | None = None,
     ):
         self._dense = dense_retriever
         self._sparse = sparse_retriever
@@ -63,6 +69,8 @@ class QueryPipeline:
         self._tracer = tracer or NullTracer()
         self._metrics = metrics_collector
         self._query_router = query_router or RuleBasedQueryRouter()
+        self._conversation_store = conversation_store
+        self._query_rewriter = query_rewriter or NoOpQueryRewriter()
 
     def _retrieve_hybrid_candidates(
         self,
@@ -94,7 +102,7 @@ class QueryPipeline:
 
         return dense_results, sparse_results
 
-    def run(self, query: str) -> QueryResult:
+    def run(self, query: str, conversation_id: str | None = None) -> QueryResult:
         """
         Full query pipeline:
         1. Start trace
@@ -108,11 +116,14 @@ class QueryPipeline:
 
         Args:
             query: User's natural language question
+            conversation_id: Optional process-local conversation memory key
         Returns:
             QueryResult with answer, citations, latency, cost
         """
         start = time.perf_counter()
         timings_ms: dict[str, float] = {}
+        retrieval_query = query
+        rewrite_result = RewriteResult(query=query)
 
         # Step 1: Start trace
         ctx = self._tracer.start_trace(query)
@@ -145,6 +156,8 @@ class QueryPipeline:
                 cost_usd=0.0,
                 timings_ms=rounded_timings_ms,
                 route=route_decision.route.value,
+                retrieval_query=query,
+                query_rewritten=False,
             )
 
             if self._metrics:
@@ -163,8 +176,27 @@ class QueryPipeline:
             )
             return result
 
+        if conversation_id and route_decision.route == QueryRoute.FOLLOW_UP:
+            history = (
+                self._conversation_store.get_recent(conversation_id)
+                if self._conversation_store is not None
+                else []
+            )
+            rewrite_result = self._query_rewriter.rewrite(
+                query=query,
+                history=history,
+                timings_ms=timings_ms,
+            )
+            retrieval_query = rewrite_result.query
+            ctx.query = retrieval_query
+        elif route_decision.route == QueryRoute.FOLLOW_UP:
+            timings_ms["query_rewriting"] = 0.0
+
         # Step 2 & 3: Parallel retrieval
-        dense_results, sparse_results = self._retrieve_hybrid_candidates(query, timings_ms)
+        dense_results, sparse_results = self._retrieve_hybrid_candidates(
+            retrieval_query,
+            timings_ms,
+        )
 
         # Step 4: RRF fusion
         stage_start = time.perf_counter()
@@ -173,7 +205,7 @@ class QueryPipeline:
 
         # Step 5: Rerank
         stage_start = time.perf_counter()
-        reranked = self._reranker.rerank(query, merged)
+        reranked = self._reranker.rerank(retrieval_query, merged)
         timings_ms["reranking"] = _elapsed_ms(stage_start)
 
         # Step 6: Log retrieval
@@ -185,7 +217,7 @@ class QueryPipeline:
         )
 
         # Step 7: Generate
-        gen_response = self._generator.generate(query, reranked, timings_ms=timings_ms)
+        gen_response = self._generator.generate(retrieval_query, reranked, timings_ms=timings_ms)
 
         timings_ms["total_latency"] = _elapsed_ms(start)
         rounded_timings_ms = _rounded_timings(timings_ms)
@@ -194,7 +226,7 @@ class QueryPipeline:
         # Step 8: Log generation (cost + tokens flow from GeneratorResponse)
         self._tracer.log_generation(
             ctx=ctx,
-            prompt=f"[query: {query}]",
+            prompt=f"[query: {retrieval_query}]",
             response=gen_response.answer[:500],
             tokens_in=gen_response.tokens_input,
             tokens_out=gen_response.tokens_output,
@@ -212,8 +244,14 @@ class QueryPipeline:
                 "query_route": route_decision.route.value,
                 "route_reason": route_decision.reason,
                 "short_circuited": False,
+                "original_query": query,
+                "retrieval_query": retrieval_query,
+                "query_rewritten": rewrite_result.rewritten,
+                "rewrite_error": rewrite_result.error,
             },
         )
+
+        total_cost_usd = gen_response.cost_usd + rewrite_result.cost_usd
 
         result = QueryResult(
             query=query,
@@ -221,10 +259,23 @@ class QueryPipeline:
             citations=gen_response.citations,
             refused=gen_response.refused,
             latency_ms=elapsed_ms,
-            cost_usd=gen_response.cost_usd,
+            cost_usd=total_cost_usd,
             timings_ms=rounded_timings_ms,
             route=route_decision.route.value,
+            retrieval_query=retrieval_query,
+            query_rewritten=rewrite_result.rewritten,
         )
+
+        if conversation_id and self._conversation_store is not None and not result.refused:
+            self._conversation_store.append(
+                conversation_id,
+                ConversationTurn(
+                    user_query=query,
+                    retrieval_query=retrieval_query,
+                    answer=result.answer,
+                    citation_chunk_ids=[citation.chunk_id for citation in result.citations],
+                ),
+            )
 
         # Record metrics
         if self._metrics:
@@ -241,6 +292,7 @@ class QueryPipeline:
             f"Query completed in {result.latency_ms}ms | "
             f"route={result.route} | citations={len(result.citations)} | "
             f"refused={result.refused} | "
+            f"query_rewritten={result.query_rewritten} | "
             f"timings_ms={result.timings_ms}"
         )
         return result
