@@ -45,7 +45,7 @@ class BM25Store:
 
         logger.info(f"Loaded BM25 index from {path} ({len(self._chunk_ids)} chunks)")
 
-    def load_from_memory(self, bm25: BM25Okapi, chunk_ids: list[str], chunk_texts: list[str], chunk_metadata: list[dict]) -> None:
+    def load_from_memory(self, bm25: BM25Okapi | None, chunk_ids: list[str], chunk_texts: list[str], chunk_metadata: list[dict]) -> None:
         """Load directly from in-memory objects (for ephemeral sessions)."""
         self._bm25 = bm25
         self._chunk_ids = chunk_ids
@@ -53,11 +53,18 @@ class BM25Store:
         self._chunk_metadata = chunk_metadata
         logger.info(f"Loaded BM25 index from memory ({len(self._chunk_ids)} chunks)")
 
+    @property
+    def chunk_ids(self) -> list[str]:
+        """Return the IDs represented by the loaded sparse index."""
+        return list(self._chunk_ids)
+
     def query(self, query_text: str, top_k: int) -> list[RetrievedChunk]:
         """
         Tokenize query, score all chunks, return top_k.
         retrieval_method is set to "sparse" on returned chunks.
         """
+        if self._bm25 is None and not self._chunk_ids:
+            return []
         if self._bm25 is None:
             raise RuntimeError(
                 "BM25 index not loaded. Call load() first or run: python scripts/ingest.py"

@@ -44,6 +44,7 @@ from retrieval.reranker import CrossEncoderReranker
 from retrieval.sparse import SparseRetriever
 from store.bm25 import BM25Store
 from store.vector import VectorStore
+from store.manifest import manifest_path_for, validate_manifest
 from utils.logger import setup_logging, get_logger
 
 logger = get_logger(__name__)
@@ -107,6 +108,16 @@ async def lifespan(app: FastAPI):
 
     bm25_store = BM25Store()
     bm25_store.load(Path(settings.bm25_index_path))
+    validate_manifest(
+        path=manifest_path_for(Path(settings.bm25_index_path)),
+        collection_name=settings.collection_name,
+        embedding_model=settings.embedding_model,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        papers_dir=Path("data/papers"),
+        vector_store=vector_store,
+        bm25_store=bm25_store,
+    )
 
     dense_retriever = DenseRetriever(vector_store, _shared_embedder, top_k=settings.retrieval_top_k)
     sparse_retriever = SparseRetriever(bm25_store, top_k=settings.retrieval_top_k)

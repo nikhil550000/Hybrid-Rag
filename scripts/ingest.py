@@ -14,6 +14,7 @@ from ingestion.loader import PDFLoader
 from ingestion.chunker import Chunker
 from ingestion.indexer import BM25Indexer
 from store.vector import VectorStore
+from store.manifest import manifest_path_for
 from llm.embeddings import SentenceTransformerEmbedder
 from pipeline.ingest import IngestPipeline
 from utils.logger import setup_logging, new_correlation_id, get_logger
@@ -52,6 +53,13 @@ def main() -> None:
         bm25_indexer=bm25_indexer,
         vector_store=vector_store,
         bm25_index_path=Path(settings.bm25_index_path),
+        manifest_path=manifest_path_for(Path(settings.bm25_index_path)),
+        manifest_metadata={
+            "collection_name": settings.collection_name,
+            "embedding_model": settings.embedding_model,
+            "chunk_size": settings.chunk_size,
+            "chunk_overlap": settings.chunk_overlap,
+        },
     )
 
     # Run

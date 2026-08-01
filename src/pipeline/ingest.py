@@ -11,6 +11,7 @@ from ingestion.chunker import Chunker
 from ingestion.indexer import BM25Indexer
 from store.vector import VectorStore
 from store.bm25 import BM25Store
+from store.manifest import build_manifest, manifest_path_for, write_manifest
 from llm.embeddings import EmbeddingClient
 from utils.logger import get_logger
 
@@ -37,6 +38,8 @@ class IngestPipeline:
         bm25_indexer: BM25Indexer,
         vector_store: VectorStore,
         bm25_index_path: Path,
+        manifest_path: Path | None = None,
+        manifest_metadata: dict | None = None,
     ):
         self._loader = loader
         self._chunker = chunker
@@ -44,6 +47,8 @@ class IngestPipeline:
         self._bm25_indexer = bm25_indexer
         self._vector_store = vector_store
         self._bm25_index_path = bm25_index_path
+        self._manifest_path = manifest_path or manifest_path_for(bm25_index_path)
+        self._manifest_metadata = manifest_metadata or {}
         self._bm25_store = None
 
     def set_bm25_store(self, store: BM25Store) -> None:
@@ -54,7 +59,8 @@ class IngestPipeline:
         """
         Load all PDFs, chunk, embed, and persist.
         Skips individual PDF failures without halting (FR-07).
-        Idempotent: skips chunks already in the vector store (FR-06).
+        Persistent ingestion performs a full rebuild; ephemeral sessions remain
+        isolated in-memory indexes.
 
         Args:
             papers_dir: Path to directory containing .pdf files
@@ -65,7 +71,7 @@ class IngestPipeline:
         logger.info(f"Loading PDFs from {papers_dir}")
         pages, failed_files = self._loader.load_all(papers_dir)
 
-        if not pages:
+        if not pages and ephemeral:
             logger.warning("No pages extracted — nothing to ingest")
             return IngestResult(
                 files_processed=0,
@@ -79,17 +85,18 @@ class IngestPipeline:
         logger.info(f"Chunked into {len(chunks)} chunks")
 
         # Step 3: Embed
-        logger.info("Generating embeddings...")
         texts = [chunk.text for chunk in chunks]
-        embeddings = self._embedder.embed_batch(texts)
+        if texts:
+            logger.info("Generating embeddings...")
+            embeddings = self._embedder.embed_batch(texts)
+        else:
+            embeddings = []
 
-        # Step 4: Store in ChromaDB (idempotent — skips duplicates)
-        chunks_inserted = self._vector_store.add(chunks, embeddings)
-
-        # Step 5: Build BM25 index
+        # Build BM25 from exactly the same chunks that will be stored in Chroma.
         bm25, chunk_ids = self._bm25_indexer.build(chunks)
-        
+
         if ephemeral and self._bm25_store is not None:
+            chunks_inserted = self._vector_store.add(chunks, embeddings)
             self._bm25_store.load_from_memory(
                 bm25=bm25,
                 chunk_ids=chunk_ids,
@@ -98,7 +105,17 @@ class IngestPipeline:
             )
             logger.info("Skipped saving BM25 index to disk (ephemeral mode)")
         else:
+            # Persistent ingestion is a full rebuild. This removes deleted or stale
+            # chunks before inserting the exact corpus represented by BM25.
+            self._vector_store.reset()
+            chunks_inserted = self._vector_store.add(chunks, embeddings)
             self._bm25_indexer.save(bm25, chunk_ids, chunks, self._bm25_index_path)
+            manifest = build_manifest(
+                **self._manifest_metadata,
+                papers_dir=papers_dir,
+                chunk_ids=chunk_ids,
+            )
+            write_manifest(self._manifest_path, manifest)
 
         # Count unique source files that succeeded
         source_files = {page.source for page in pages}
@@ -112,7 +129,7 @@ class IngestPipeline:
 
         logger.info(
             f"Ingestion complete: {result.files_processed} files, "
-            f"{result.chunks_created} new chunks, "
+            f"{result.chunks_created} chunks, "
             f"{result.files_failed} failed"
         )
         return result

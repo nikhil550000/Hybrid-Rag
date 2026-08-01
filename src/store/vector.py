@@ -28,6 +28,7 @@ class VectorStore:
     """ChromaDB interface — all reads and writes to the vector store go through here."""
 
     def __init__(self, collection_name: str, persist_directory: str = "", ephemeral: bool = False):
+        self._collection_name = collection_name
         if ephemeral:
             self._client = chromadb.EphemeralClient()
             logger.info(f"VectorStore initialized (EPHEMERAL): collection='{collection_name}'")
@@ -43,6 +44,24 @@ class VectorStore:
             metadata={"hnsw:space": "cosine"},
         )
         logger.info(f"Existing count in collection: {self._collection.count()}")
+
+    @property
+    def count(self) -> int:
+        """Return the number of chunks currently stored."""
+        return self._collection.count()
+
+    def get_chunk_ids(self) -> list[str]:
+        """Return all stored chunk IDs for index consistency checks."""
+        return list(self._collection.get()["ids"])
+
+    def reset(self) -> None:
+        """Replace the collection with an empty collection for a full rebuild."""
+        self._client.delete_collection(name=self._collection_name)
+        self._collection = self._client.get_or_create_collection(
+            name=self._collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+        logger.info(f"Reset vector collection '{self._collection_name}'")
 
     def add(self, chunks: list[Chunk], embeddings: list[list[float]]) -> int:
         """
