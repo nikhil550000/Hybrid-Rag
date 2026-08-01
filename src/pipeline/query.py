@@ -43,6 +43,8 @@ class QueryResult:
     route: str = QueryRoute.RAG_FACTUAL.value
     retrieval_query: str = ""
     query_rewritten: bool = False
+    pre_rerank_chunks: list[RetrievedChunk] = field(default_factory=list)
+    post_rerank_chunks: list[RetrievedChunk] = field(default_factory=list)
 
 
 class QueryPipeline:
@@ -264,6 +266,8 @@ class QueryPipeline:
             route=route_decision.route.value,
             retrieval_query=retrieval_query,
             query_rewritten=rewrite_result.rewritten,
+            pre_rerank_chunks=merged,
+            post_rerank_chunks=reranked,
         )
 
         if conversation_id and self._conversation_store is not None and not result.refused:

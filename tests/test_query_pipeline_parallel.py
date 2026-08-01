@@ -106,6 +106,8 @@ def test_dense_and_sparse_retrieval_run_in_parallel_and_keep_rrf_inputs_ordered(
 
     assert elapsed < 0.35
     assert reranker.seen_chunk_ids == ["dense-a", "sparse-a"]
+    assert [chunk.chunk_id for chunk in result.pre_rerank_chunks] == ["dense-a", "sparse-a"]
+    assert [chunk.chunk_id for chunk in result.post_rerank_chunks] == ["dense-a", "sparse-a"]
     assert result.timings_ms["query_embedding"] == 25.0
     assert result.timings_ms["dense_retrieval"] == 175.0
     assert result.timings_ms["sparse_retrieval"] >= 190.0

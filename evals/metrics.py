@@ -1,4 +1,4 @@
-"""Evaluation metrics — DeepEval LLM-as-judge + citation accuracy.
+"""Evaluation metrics — DeepEval LLM-as-judge + retrieval/citation metrics.
 
 Satisfies: FR-27, FR-28
 
@@ -8,6 +8,7 @@ Uses DeepEval with AnthropicModel as the evaluation judge to compute:
   - Context Recall: do the retrieved contexts contain the ground truth?
 """
 import json
+import math
 import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -35,6 +36,10 @@ class EvalSample:
     source: str
     generated_answer: str = ""
     retrieved_contexts: list[str] = field(default_factory=list)
+    pre_rerank_sources: list[str] = field(default_factory=list)
+    post_rerank_sources: list[str] = field(default_factory=list)
+    pre_rerank_chunk_ids: list[str] = field(default_factory=list)
+    post_rerank_chunk_ids: list[str] = field(default_factory=list)
     citations_valid: int = 0
     citations_invalid: int = 0
     refused: bool = False
@@ -52,7 +57,15 @@ class EvalReport:
     faithfulness_score: float = 0.0
     answer_relevancy_score: float = 0.0
     context_recall_score: float = 0.0
-    citation_accuracy: float = 0.0
+    citation_presence_rate: float = 0.0
+    pre_rerank_source_recall_at_k: float = 0.0
+    post_rerank_source_recall_at_k: float = 0.0
+    pre_rerank_source_mrr: float = 0.0
+    post_rerank_source_mrr: float = 0.0
+    pre_rerank_source_ndcg: float = 0.0
+    post_rerank_source_ndcg: float = 0.0
+    reranker_source_win_rate: float = 0.0
+    post_rerank_hit_rate_by_paper: dict[str, float] = field(default_factory=dict)
     samples: list[dict] = field(default_factory=list)
 
     def write(self, output_dir: Path = Path("evals")) -> Path:
@@ -163,9 +176,71 @@ def run_deepeval_evaluation(
     return scores
 
 
-def compute_citation_accuracy(samples: list[EvalSample]) -> float:
-    """Simple metric: % of answered questions with ≥1 valid citation."""
+def _first_source_rank(sources: list[str], expected_source: str) -> int | None:
+    """Return the one-indexed rank of the first chunk from the expected source."""
+    for index, source in enumerate(sources, start=1):
+        if source == expected_source:
+            return index
+    return None
+
+
+def _mean_reciprocal_rank(ranks: list[int | None]) -> float:
+    if not ranks:
+        return 0.0
+    return sum((1.0 / rank) if rank is not None else 0.0 for rank in ranks) / len(ranks)
+
+
+def _mean_ndcg(ranks: list[int | None]) -> float:
+    if not ranks:
+        return 0.0
+    return sum((1.0 / math.log2(rank + 1)) if rank is not None else 0.0 for rank in ranks) / len(ranks)
+
+
+def compute_citation_presence_rate(samples: list[EvalSample]) -> float:
+    """Return the share of answered questions with at least one valid citation."""
     answered = [s for s in samples if not s.refused]
     if not answered:
         return 0.0
     return sum(1 for s in answered if s.citations_valid > 0) / len(answered)
+
+
+def compute_retrieval_metrics(samples: list[EvalSample]) -> dict[str, float]:
+    """Compute source-level retrieval metrics from the golden answer source."""
+    evaluated = [s for s in samples if not s.refused]
+    if not evaluated:
+        return {
+            "pre_rerank_source_recall_at_k": 0.0,
+            "post_rerank_source_recall_at_k": 0.0,
+            "pre_rerank_source_mrr": 0.0,
+            "post_rerank_source_mrr": 0.0,
+            "pre_rerank_source_ndcg": 0.0,
+            "post_rerank_source_ndcg": 0.0,
+            "reranker_source_win_rate": 0.0,
+            "post_rerank_hit_rate_by_paper": {},
+        }
+
+    pre_ranks = [_first_source_rank(s.pre_rerank_sources, s.source) for s in evaluated]
+    post_ranks = [_first_source_rank(s.post_rerank_sources, s.source) for s in evaluated]
+    comparable = [
+        (pre, post)
+        for pre, post in zip(pre_ranks, post_ranks)
+        if pre is not None and post is not None
+    ]
+    wins = sum(1 for pre, post in comparable if post < pre)
+    per_paper_hits: dict[str, list[bool]] = {}
+    for sample, rank in zip(evaluated, post_ranks):
+        per_paper_hits.setdefault(sample.source, []).append(rank is not None)
+
+    return {
+        "pre_rerank_source_recall_at_k": round(sum(rank is not None for rank in pre_ranks) / len(pre_ranks), 4),
+        "post_rerank_source_recall_at_k": round(sum(rank is not None for rank in post_ranks) / len(post_ranks), 4),
+        "pre_rerank_source_mrr": round(_mean_reciprocal_rank(pre_ranks), 4),
+        "post_rerank_source_mrr": round(_mean_reciprocal_rank(post_ranks), 4),
+        "pre_rerank_source_ndcg": round(_mean_ndcg(pre_ranks), 4),
+        "post_rerank_source_ndcg": round(_mean_ndcg(post_ranks), 4),
+        "reranker_source_win_rate": round(wins / len(comparable), 4) if comparable else 0.0,
+        "post_rerank_hit_rate_by_paper": {
+            source: round(sum(hits) / len(hits), 4)
+            for source, hits in sorted(per_paper_hits.items())
+        },
+    }

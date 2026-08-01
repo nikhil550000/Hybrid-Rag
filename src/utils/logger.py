@@ -23,6 +23,11 @@ def get_correlation_id() -> str:
     return _correlation_id.get()
 
 
+def set_correlation_id(correlation_id: str) -> None:
+    """Set the current correlation ID from an inbound request."""
+    _correlation_id.set(correlation_id)
+
+
 class CorrelationFilter(logging.Filter):
     """Injects correlation_id into every log record."""
     def filter(self, record: logging.LogRecord) -> bool:

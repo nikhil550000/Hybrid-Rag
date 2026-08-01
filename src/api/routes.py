@@ -8,6 +8,7 @@ QueryPipeline from config at startup and calls pipeline.run(query) per
 request. CLI and API exercise identical code paths.
 """
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -18,9 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uuid
 import tempfile
-import shutil
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import QueryRequest, QueryResponse, CitationSchema, ErrorResponse, HealthResponse, UploadResponse
@@ -45,9 +46,15 @@ from retrieval.sparse import SparseRetriever
 from store.bm25 import BM25Store
 from store.vector import VectorStore
 from store.manifest import manifest_path_for, validate_manifest
-from utils.logger import setup_logging, get_logger
+from utils.logger import setup_logging, get_logger, new_correlation_id, get_correlation_id, set_correlation_id
 
 logger = get_logger(__name__)
+
+MAX_UPLOAD_FILES = 5
+MAX_UPLOAD_FILE_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 50 * 1024 * 1024
+UPLOAD_COPY_CHUNK_BYTES = 1024 * 1024
+_SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._ -]+")
 
 
 @dataclass
@@ -81,6 +88,60 @@ def _build_tracer(backend: str):
             return NullTracer()
         return LangfuseTracer(public_key=public_key, secret_key=secret_key, host=host)
     return NullTracer()
+
+
+def _sanitize_pdf_filename(filename: str | None, index: int, seen_names: set[str]) -> str:
+    """Return a basename-only, lowercase-.pdf filename safe for temp storage."""
+    basename = Path(filename or "").name
+    if not basename or basename in {".", ".."}:
+        basename = f"upload_{index}.pdf"
+
+    path = Path(basename)
+    if path.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    stem = _SAFE_FILENAME_PATTERN.sub("_", path.stem).strip(" ._")
+    if not stem:
+        stem = f"upload_{index}"
+
+    candidate = f"{stem}.pdf"
+    counter = 2
+    while candidate in seen_names:
+        candidate = f"{stem}_{counter}.pdf"
+        counter += 1
+
+    seen_names.add(candidate)
+    return candidate
+
+
+def _copy_upload_with_limits(
+    upload: UploadFile,
+    destination: Path,
+    remaining_total_bytes: int,
+) -> int:
+    """Copy one upload to disk while enforcing per-file and total byte limits."""
+    bytes_written = 0
+    with open(destination, "wb") as out_file:
+        while True:
+            chunk = upload.file.read(UPLOAD_COPY_CHUNK_BYTES)
+            if not chunk:
+                break
+
+            bytes_written += len(chunk)
+            if bytes_written > MAX_UPLOAD_FILE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Each uploaded PDF must be {MAX_UPLOAD_FILE_BYTES // (1024 * 1024)}MB or smaller",
+                )
+            if bytes_written > remaining_total_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Total upload size must be {MAX_UPLOAD_TOTAL_BYTES // (1024 * 1024)}MB or smaller",
+                )
+
+            out_file.write(chunk)
+
+    return bytes_written
 
 
 @asynccontextmanager
@@ -175,6 +236,17 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """Attach a correlation ID to every API request and response."""
+    correlation_id = request.headers.get("X-Request-ID") or new_correlation_id()
+    set_correlation_id(correlation_id)
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = correlation_id
+    return response
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse)
@@ -212,7 +284,8 @@ async def query_endpoint(request: QueryRequest):
     scoped_conversation_id = f"{conversation_scope}:{conversation_id}"
 
     try:
-        result = pipeline_to_use.run(
+        result = await run_in_threadpool(
+            pipeline_to_use.run,
             request.query,
             conversation_id=scoped_conversation_id,
         )
@@ -243,7 +316,8 @@ async def query_endpoint(request: QueryRequest):
             status_code=500,
             detail=ErrorResponse(
                 error="PIPELINE_ERROR",
-                message=str(e),
+                message="Query processing failed. Use the request_id when checking backend logs.",
+                request_id=get_correlation_id(),
             ).model_dump(),
         )
 
@@ -263,8 +337,8 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
     ):
         raise HTTPException(status_code=503, detail="Shared pipeline components not initialized")
     
-    if len(files) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 files allowed per session")
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_UPLOAD_FILES} files allowed per session")
 
     session_id = str(uuid.uuid4())
     logger.info(f"Starting ephemeral session {session_id} for {len(files)} files")
@@ -272,13 +346,18 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
     # Use a temporary directory to save the uploaded PDFs for ingestion
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
-        for f in files:
-            if not f.filename.endswith(".pdf"):
-                raise HTTPException(status_code=400, detail=f"Only PDF files are supported ({f.filename})")
-            
-            file_path = temp_dir_path / f.filename
-            with open(file_path, "wb") as out_file:
-                shutil.copyfileobj(f.file, out_file)
+        seen_names: set[str] = set()
+        total_bytes = 0
+        for index, f in enumerate(files, start=1):
+            safe_filename = _sanitize_pdf_filename(f.filename, index, seen_names)
+            remaining_total_bytes = MAX_UPLOAD_TOTAL_BYTES - total_bytes
+            file_path = temp_dir_path / safe_filename
+            total_bytes += await run_in_threadpool(
+                _copy_upload_with_limits,
+                f,
+                file_path,
+                remaining_total_bytes,
+            )
 
         # Build ephemeral components
         ephemeral_vector_store = VectorStore(
@@ -297,7 +376,11 @@ async def upload_endpoint(files: list[UploadFile] = File(...)):
         )
         ingest_pipeline.set_bm25_store(ephemeral_bm25_store)
         
-        ingest_result = ingest_pipeline.run(temp_dir_path, ephemeral=True)
+        ingest_result = await run_in_threadpool(
+            ingest_pipeline.run,
+            temp_dir_path,
+            ephemeral=True,
+        )
         
         if ingest_result.chunks_created == 0:
             raise HTTPException(status_code=400, detail="Could not extract any text from uploaded PDFs")

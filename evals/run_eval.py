@@ -31,7 +31,13 @@ from pipeline.query import QueryPipeline
 
 # Import from evals/ (sibling directory)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from metrics import EvalSample, EvalReport, run_deepeval_evaluation, compute_citation_accuracy
+from metrics import (
+    EvalSample,
+    EvalReport,
+    run_deepeval_evaluation,
+    compute_citation_presence_rate,
+    compute_retrieval_metrics,
+)
 
 logger = get_logger(__name__)
 
@@ -87,16 +93,22 @@ def main():
             ground_truth=item["ground_truth"],
             source=item["source"],
             generated_answer=result.answer,
-            retrieved_contexts=[c.passage for c in result.citations],
+            retrieved_contexts=[chunk.text for chunk in result.post_rerank_chunks],
+            pre_rerank_sources=[chunk.source for chunk in result.pre_rerank_chunks],
+            post_rerank_sources=[chunk.source for chunk in result.post_rerank_chunks],
+            pre_rerank_chunk_ids=[chunk.chunk_id for chunk in result.pre_rerank_chunks],
+            post_rerank_chunk_ids=[chunk.chunk_id for chunk in result.post_rerank_chunks],
             citations_valid=len(result.citations),
             refused=result.refused,
             latency_ms=result.latency_ms,
         )
         samples.append(sample)
 
-    # Compute simple citation accuracy
-    citation_acc = compute_citation_accuracy(samples)
-    logger.info(f"Citation accuracy: {citation_acc:.4f}")
+    # Compute retrieval and citation metrics
+    citation_presence_rate = compute_citation_presence_rate(samples)
+    retrieval_metrics = compute_retrieval_metrics(samples)
+    logger.info(f"Citation presence rate: {citation_presence_rate:.4f}")
+    logger.info(f"Retrieval metrics: {retrieval_metrics}")
 
     # Run DeepEval LLM-as-judge evaluation
     logger.info("Running DeepEval LLM-as-judge evaluation...")
@@ -122,13 +134,23 @@ def main():
         faithfulness_score=judge_scores["faithfulness"],
         answer_relevancy_score=judge_scores["answer_relevancy"],
         context_recall_score=judge_scores["context_recall"],
-        citation_accuracy=round(citation_acc, 4),
+        citation_presence_rate=round(citation_presence_rate, 4),
+        pre_rerank_source_recall_at_k=retrieval_metrics["pre_rerank_source_recall_at_k"],
+        post_rerank_source_recall_at_k=retrieval_metrics["post_rerank_source_recall_at_k"],
+        pre_rerank_source_mrr=retrieval_metrics["pre_rerank_source_mrr"],
+        post_rerank_source_mrr=retrieval_metrics["post_rerank_source_mrr"],
+        pre_rerank_source_ndcg=retrieval_metrics["pre_rerank_source_ndcg"],
+        post_rerank_source_ndcg=retrieval_metrics["post_rerank_source_ndcg"],
+        reranker_source_win_rate=retrieval_metrics["reranker_source_win_rate"],
+        post_rerank_hit_rate_by_paper=retrieval_metrics["post_rerank_hit_rate_by_paper"],
         samples=[{
             "question": s.question,
             "ground_truth": s.ground_truth,
             "source": s.source,
             "generated_answer": s.generated_answer[:500],
             "citations_valid": s.citations_valid,
+            "pre_rerank_chunk_ids": s.pre_rerank_chunk_ids,
+            "post_rerank_chunk_ids": s.post_rerank_chunk_ids,
             "refused": s.refused,
             "latency_ms": s.latency_ms,
         } for s in samples],
@@ -148,7 +170,14 @@ def main():
     print(f"  Avg latency:         {report.avg_latency_ms}ms")
     print(f"  Avg citations/ans:   {report.avg_citations_per_answer}")
     print(f"{'─'*60}")
-    print(f"  Citation accuracy:   {report.citation_accuracy:.4f}")
+    print(f"  Citation presence:   {report.citation_presence_rate:.4f}")
+    print(f"  Pre-rerank Recall@k: {report.pre_rerank_source_recall_at_k:.4f}")
+    print(f"  Post-rerank Recall@k:{report.post_rerank_source_recall_at_k:.4f}")
+    print(f"  Pre-rerank MRR:      {report.pre_rerank_source_mrr:.4f}")
+    print(f"  Post-rerank MRR:     {report.post_rerank_source_mrr:.4f}")
+    print(f"  Pre-rerank nDCG:     {report.pre_rerank_source_ndcg:.4f}")
+    print(f"  Post-rerank nDCG:    {report.post_rerank_source_ndcg:.4f}")
+    print(f"  Reranker win rate:   {report.reranker_source_win_rate:.4f}")
     print(f"  Faithfulness:        {report.faithfulness_score:.4f}")
     print(f"  Answer relevancy:    {report.answer_relevancy_score:.4f}")
     print(f"  Context recall:      {report.context_recall_score:.4f}")

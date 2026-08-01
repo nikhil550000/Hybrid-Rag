@@ -50,7 +50,8 @@ class QueryResponse(BaseModel):
 class ErrorResponse(BaseModel):
     """Structured error — never expose raw stack traces (FR-WEB-04)."""
     error: str      # e.g. "PIPELINE_ERROR", "VALIDATION_ERROR"
-    message: str    # human-readable description
+    message: str    # client-safe human-readable description
+    request_id: str | None = None
 
 
 class HealthResponse(BaseModel):
