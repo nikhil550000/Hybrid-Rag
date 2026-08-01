@@ -46,6 +46,13 @@ def test_rrf_preserves_dense_sparse_ranks_scores_and_sources():
 
     merged = reciprocal_rank_fusion(dense, sparse, k=60)
 
+    assert [chunk.chunk_id for chunk in merged] == [
+        "shared",
+        "dense-only",
+        "sparse-only",
+    ]
+    assert len([chunk for chunk in merged if chunk.chunk_id == "shared"]) == 1
+
     shared = next(chunk for chunk in merged if chunk.chunk_id == "shared")
     assert shared.retrieval_method == "hybrid"
     assert shared.score == shared.provenance.rrf_score
