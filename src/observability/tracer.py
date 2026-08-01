@@ -33,6 +33,36 @@ class TraceContext:
     _generation: Any = None   # LangfuseGeneration child span
 
 
+def _chunk_retrieval_snapshot(chunk: Any) -> dict[str, Any]:
+    """Return compact retrieval metadata for tracing and debugging."""
+    provenance = getattr(chunk, "provenance", None)
+    provenance_payload: dict[str, Any] = {}
+    if provenance is not None:
+        for key in (
+            "dense_rank",
+            "dense_score",
+            "sparse_rank",
+            "sparse_score",
+            "rrf_score",
+            "rerank_score",
+        ):
+            value = getattr(provenance, key, None)
+            if value is not None:
+                provenance_payload[key] = value
+        sources = getattr(provenance, "sources", [])
+        if sources:
+            provenance_payload["sources"] = list(sources)
+
+    return {
+        "chunk_id": getattr(chunk, "chunk_id", ""),
+        "source": getattr(chunk, "source", ""),
+        "page": getattr(chunk, "page", None),
+        "score": getattr(chunk, "score", None),
+        "retrieval_method": getattr(chunk, "retrieval_method", ""),
+        "provenance": provenance_payload,
+    }
+
+
 # ─── Protocol ─────────────────────────────────────────────────────────────────
 
 class TracerProtocol(Protocol):
@@ -148,6 +178,12 @@ class LangfuseTracer:
                 "post_rerank_count": len(post_rerank),
                 "pre_rerank_ids": [c.chunk_id for c in pre_rerank[:10]],
                 "post_rerank_ids": [c.chunk_id for c in post_rerank],
+                "pre_rerank_chunks": [
+                    _chunk_retrieval_snapshot(c) for c in pre_rerank[:10]
+                ],
+                "post_rerank_chunks": [
+                    _chunk_retrieval_snapshot(c) for c in post_rerank
+                ],
             }
             retrieval_timing_keys = {
                 "query_embedding",

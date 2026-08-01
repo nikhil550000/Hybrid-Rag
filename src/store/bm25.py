@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rank_bm25 import BM25Okapi
 
-from store.vector import RetrievedChunk
+from store.vector import RetrievalProvenance, RetrievedChunk
 from utils.logger import get_logger
 from utils.tokenization import tokenize
 
@@ -83,15 +83,21 @@ class BM25Store:
         )[:top_k]
 
         retrieved: list[RetrievedChunk] = []
-        for idx in top_indices:
+        for rank, idx in enumerate(top_indices, start=1):
+            score = float(scores[idx])
             metadata = self._chunk_metadata[idx]
             retrieved.append(RetrievedChunk(
                 chunk_id=self._chunk_ids[idx],
                 text=self._chunk_texts[idx],
                 source=metadata["source"],
                 page=metadata["page"],
-                score=float(scores[idx]),
+                score=score,
                 retrieval_method="sparse",
+                provenance=RetrievalProvenance(
+                    sparse_rank=rank,
+                    sparse_score=score,
+                    sources=["sparse"],
+                ),
             ))
 
         return retrieved

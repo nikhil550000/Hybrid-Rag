@@ -3,7 +3,7 @@
 Implements: HLD 3.3
 Satisfies: FR-04, FR-05, FR-06
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import chromadb
 
@@ -11,6 +11,31 @@ from ingestion.chunker import Chunk
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class RetrievalProvenance:
+    """Stage-specific retrieval metadata preserved across fusion and reranking."""
+    dense_rank: int | None = None
+    dense_score: float | None = None
+    sparse_rank: int | None = None
+    sparse_score: float | None = None
+    rrf_score: float | None = None
+    rerank_score: float | None = None
+    sources: list[str] = field(default_factory=list)
+
+
+def clone_retrieval_provenance(provenance: RetrievalProvenance) -> RetrievalProvenance:
+    """Return a copy of retrieval provenance without sharing mutable source lists."""
+    return RetrievalProvenance(
+        dense_rank=provenance.dense_rank,
+        dense_score=provenance.dense_score,
+        sparse_rank=provenance.sparse_rank,
+        sparse_score=provenance.sparse_score,
+        rrf_score=provenance.rrf_score,
+        rerank_score=provenance.rerank_score,
+        sources=list(provenance.sources),
+    )
 
 
 @dataclass
@@ -22,6 +47,7 @@ class RetrievedChunk:
     page: int
     score: float
     retrieval_method: str  # "dense" | "sparse" | "hybrid" | "reranked"
+    provenance: RetrievalProvenance = field(default_factory=RetrievalProvenance)
 
 
 class VectorStore:
@@ -119,6 +145,11 @@ class VectorStore:
                 page=metadata["page"],
                 score=score,
                 retrieval_method="dense",
+                provenance=RetrievalProvenance(
+                    dense_rank=i + 1,
+                    dense_score=score,
+                    sources=["dense"],
+                ),
             ))
 
         return retrieved
