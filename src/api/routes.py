@@ -223,6 +223,7 @@ async def query_endpoint(request: QueryRequest):
                 CitationSchema(
                     chunk_id=c.chunk_id,
                     source=c.source,
+                    page=c.page + 1,
                     passage=c.passage,
                 )
                 for c in result.citations

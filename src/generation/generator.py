@@ -13,6 +13,10 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 REFUSAL_PREFIX = "INSUFFICIENT_CONTEXT"
+NO_VALID_CITATIONS_REFUSAL = (
+    "INSUFFICIENT_CONTEXT: I could not produce an answer with valid citations "
+    "from the provided context."
+)
 
 
 def _record_timing(
@@ -65,6 +69,7 @@ class Generator:
         3. Check for INSUFFICIENT_CONTEXT refusal
         4. Validate citations (two-layer: prompt instruction + post-processing)
         5. Strip invalid citations from answer
+        6. Refuse if no valid citations remain
 
         Args:
             query: User's question
@@ -111,12 +116,25 @@ class Generator:
         _record_timing(timings_ms, "citation_validation", stage_start)
 
         # Step 5: Strip invalid citations from the answer
-        clean_answer = raw_answer
-        for invalid_id in invalid_ids:
-            clean_answer = clean_answer.replace(f"[SOURCE: {invalid_id}]", "")
+        clean_answer = self._citation_validator.remove_invalid_citations(
+            raw_answer, invalid_ids
+        ).strip()
+
+        if not valid_citations:
+            logger.warning("Generated answer contained no valid citations; refusing response")
+            return GeneratorResponse(
+                answer=NO_VALID_CITATIONS_REFUSAL,
+                citations=[],
+                refused=True,
+                refusal_reason=NO_VALID_CITATIONS_REFUSAL,
+                tokens_input=llm_response.tokens_input,
+                tokens_output=llm_response.tokens_output,
+                cost_usd=llm_response.cost_usd,
+                model=llm_response.model,
+            )
 
         return GeneratorResponse(
-            answer=clean_answer.strip(),
+            answer=clean_answer,
             citations=valid_citations,
             refused=False,
             tokens_input=llm_response.tokens_input,

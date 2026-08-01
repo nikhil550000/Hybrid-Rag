@@ -29,6 +29,7 @@ class CitationSchema(BaseModel):
     """A single citation reference in the response."""
     chunk_id: str
     source: str
+    page: int
     passage: str
 
 
