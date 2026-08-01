@@ -55,10 +55,12 @@ class ErrorResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
+    """Health and lightweight readiness response."""
     status: str
     version: str
     chunks_indexed: int
+    ready: bool
+    checks: dict[str, bool] = Field(default_factory=dict)
 
 class UploadResponse(BaseModel):
     """Response returned when successfully uploading PDFs for a session."""

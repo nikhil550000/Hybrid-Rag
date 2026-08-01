@@ -10,6 +10,7 @@ request. CLI and API exercise identical code paths.
 import os
 import re
 import sys
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,6 +69,9 @@ class DocumentSession:
 _pipeline: QueryPipeline | None = None
 _metrics: MetricsCollector | None = None
 _chunk_count: int = 0
+_settings_ready: bool = False
+_vector_store_ready: bool = False
+_bm25_store_ready: bool = False
 _active_document_sessions: dict[str, DocumentSession] = {}
 _shared_embedder: SentenceTransformerEmbedder | None = None
 _shared_reranker: CrossEncoderReranker | None = None
@@ -75,6 +79,23 @@ _shared_generator: Generator | None = None
 _shared_tracer: TracerProtocol | None = None
 _shared_conversation_store: InMemoryConversationStore | None = None
 _shared_query_rewriter: QueryRewriter | None = None
+
+
+def _readiness_checks() -> dict[str, bool]:
+    return {
+        "settings": _settings_ready,
+        "pipeline": _pipeline is not None,
+        "metrics": _metrics is not None,
+        "vector_store": _vector_store_ready,
+        "bm25_index": _bm25_store_ready,
+        "embedder": _shared_embedder is not None,
+        "reranker": _shared_reranker is not None,
+        "generator": _shared_generator is not None,
+        "tracer": _shared_tracer is not None,
+        "conversation_store": _shared_conversation_store is not None,
+        "query_rewriter": _shared_query_rewriter is not None,
+        "chunks_indexed": _chunk_count > 0,
+    }
 
 
 def _build_tracer(backend: str):
@@ -148,10 +169,12 @@ def _copy_upload_with_limits(
 async def lifespan(app: FastAPI):
     """Initialize pipeline once at startup, tear down on shutdown."""
     global _pipeline, _metrics, _chunk_count
+    global _settings_ready, _vector_store_ready, _bm25_store_ready
     global _shared_embedder, _shared_reranker, _shared_generator, _shared_tracer
     global _shared_conversation_store, _shared_query_rewriter
 
     settings = load_settings()
+    _settings_ready = True
     setup_logging(log_level=settings.log_level)
     logger.info("Starting RAG Scholar API server...")
 
@@ -166,9 +189,11 @@ async def lifespan(app: FastAPI):
         persist_directory=settings.vector_store_path,
     )
     _chunk_count = vector_store._collection.count()
+    _vector_store_ready = True
 
     bm25_store = BM25Store()
     bm25_store.load(Path(settings.bm25_index_path))
+    _bm25_store_ready = True
     validate_manifest(
         path=manifest_path_for(Path(settings.bm25_index_path)),
         collection_name=settings.collection_name,
@@ -251,11 +276,14 @@ async def correlation_id_middleware(request: Request, call_next):
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    """Health check for monitoring."""
+    """Health check plus cheap component readiness details."""
+    checks = _readiness_checks()
     return HealthResponse(
         status="ok",
         version="1.0.0",
         chunks_indexed=_chunk_count,
+        ready=all(checks.values()),
+        checks=checks,
     )
 
 
@@ -283,6 +311,7 @@ async def query_endpoint(request: QueryRequest):
     conversation_scope = request.session_id or "default"
     scoped_conversation_id = f"{conversation_scope}:{conversation_id}"
 
+    request_start = time.perf_counter()
     try:
         result = await run_in_threadpool(
             pipeline_to_use.run,
@@ -311,6 +340,16 @@ async def query_endpoint(request: QueryRequest):
             query_rewritten=result.query_rewritten,
         )
     except Exception as e:
+        latency_ms = round((time.perf_counter() - request_start) * 1000, 1)
+        if _metrics is not None:
+            _metrics.record_request(
+                latency_ms=latency_ms,
+                cost_usd=0.0,
+                has_citations=False,
+                failed=True,
+                timings_ms={"total_latency": latency_ms},
+                route="PIPELINE_ERROR",
+            )
         logger.error(f"Pipeline error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,

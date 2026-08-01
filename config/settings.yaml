@@ -12,7 +12,7 @@ retrieval:
   rrf_k: 60                    # RRF constant — don't change unless you know why
 
 reranker:
-  provider: sentence_transformers  # sentence_transformers | cohere
+  provider: sentence_transformers  # currently implemented provider
   model: cross-encoder/ms-marco-MiniLM-L-6-v2
 
 chunking:
