@@ -10,6 +10,7 @@ from rank_bm25 import BM25Okapi
 
 from ingestion.chunker import Chunk
 from utils.logger import get_logger
+from utils.tokenization import tokenize
 
 logger = get_logger(__name__)
 
@@ -25,7 +26,7 @@ class BM25Indexer:
             (bm25_index, chunk_ids) — chunk_ids[i] matches the i-th document in the index
         """
         chunk_ids = [chunk.id for chunk in chunks]
-        tokenized_corpus = [chunk.text.lower().split() for chunk in chunks]
+        tokenized_corpus = [tokenize(chunk.text) for chunk in chunks]
 
         bm25 = BM25Okapi(tokenized_corpus) if tokenized_corpus else None
 

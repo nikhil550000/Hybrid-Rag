@@ -10,6 +10,7 @@ from rank_bm25 import BM25Okapi
 
 from store.vector import RetrievedChunk
 from utils.logger import get_logger
+from utils.tokenization import tokenize
 
 logger = get_logger(__name__)
 
@@ -70,12 +71,15 @@ class BM25Store:
                 "BM25 index not loaded. Call load() first or run: python scripts/ingest.py"
             )
 
-        tokenized_query = query_text.lower().split()
+        tokenized_query = tokenize(query_text)
         scores = self._bm25.get_scores(tokenized_query)
 
-        # Get top_k indices sorted by score descending
+        # Ignore documents with no lexical match. They add noise to RRF when
+        # the query contains terms absent from the indexed corpus.
         top_indices = sorted(
-            range(len(scores)), key=lambda i: scores[i], reverse=True
+            (i for i, score in enumerate(scores) if score > 0.0),
+            key=lambda i: scores[i],
+            reverse=True,
         )[:top_k]
 
         retrieved: list[RetrievedChunk] = []
